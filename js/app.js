@@ -1713,6 +1713,7 @@ function startRest(exId, name) {
   if (rest?.timer) clearInterval(rest.timer);
   rest = { end: Date.now() + total * 1000, total, exId, name, finished: false, timer: null };
   rest.timer = setInterval(tickRest, 250);
+  saveRestState();
   keepAwake(true);
   drawRest();
 }
@@ -1726,12 +1727,14 @@ function adjustRest(delta) {
   saveSettings();
   if (rest.end <= Date.now()) rest.end = Date.now() + 1000;
   rest.finished = false;
+  saveRestState();
   drawRest();
 }
 
 function stopRest() {
   if (rest?.timer) clearInterval(rest.timer);
   rest = null;
+  saveRestState();
   restEl().hidden = true;
   document.body.classList.remove('resting');
   keepAwake(false);
@@ -1766,6 +1769,24 @@ function drawRest() {
   el.classList.toggle('finished', rest.finished);
   el.hidden = false;
   document.body.classList.add('resting');
+}
+
+// El descanso se guarda para seguir contando aunque se cierre la app
+function saveRestState() {
+  try {
+    if (rest) localStorage.setItem('rest', JSON.stringify({ end: rest.end, total: rest.total, exId: rest.exId, name: rest.name }));
+    else localStorage.removeItem('rest');
+  } catch (e) { /* sin almacenamiento */ }
+}
+function restoreRest() {
+  try {
+    const r = JSON.parse(localStorage.getItem('rest') || 'null');
+    if (!r || Date.now() - r.end > 60000) { localStorage.removeItem('rest'); return; }
+    rest = { ...r, finished: r.end <= Date.now(), timer: null };
+    rest.timer = setInterval(tickRest, 250);
+    if (rest.finished) setTimeout(() => { if (rest?.finished) stopRest(); }, 6000);
+    drawRest();
+  } catch (e) { /* nada que restaurar */ }
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -2278,6 +2299,7 @@ async function boot() {
     return;
   }
   render();
+  restoreRest();
   store.askPersist();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
