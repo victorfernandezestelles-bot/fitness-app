@@ -1,6 +1,6 @@
 # Fitness
 
-App personal para el iPhone: comidas, macros y micronutrientes, recetas propias, peso, pasos y (próximamente) entrenamiento con recuento de series por músculo.
+App personal para el iPhone: comidas, macros y micronutrientes, recetas propias, peso, pasos y entrenamiento con recuento de series por músculo.
 
 Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el teléfono**; el código de este repositorio no contiene ningún dato personal.
 
@@ -16,6 +16,7 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 - **Escáner de códigos de barras** con la cámara. Si el producto no está guardado, se busca en [Open Food Facts](https://world.openfoodfacts.org); si tampoco está ahí, se copian los datos de la etiqueta una vez y quedan guardados.
 - **Recetas**: ingredientes con sus gramos, raciones y peso del plato cocinado, para apuntar por raciones o por gramos servidos.
 - **Básicos**: unos 35 alimentos comunes con valores medios orientativos.
+- **Entreno**: unos 70 ejercicios con sus músculos principales y secundarios, ejercicios propios, rutinas, registro de series (kg, repeticiones, calentamiento), lo que hiciste la última vez, historial con 1RM estimado y series semanales por músculo (1 por principal, 0,5 por secundario).
 - **Progreso**: gráfica de peso con media de 7 días, pasos de las últimas dos semanas y media de calorías.
 - **Copias**: exporta todo a `.json` (para restaurar) o a `.csv` (para Excel, con separador `;` y coma decimal). La app avisa si pasa una semana sin copia.
 - Funciona sin conexión una vez abierta por primera vez (salvo la búsqueda en Open Food Facts).
@@ -28,6 +29,7 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 | `css/styles.css` | Estilos |
 | `js/app.js` | Pantallas y lógica |
 | `js/nutrients.js` | Nutrientes, valores de referencia y alimentos básicos |
+| `js/exercises.js` | Músculos y biblioteca de ejercicios |
 | `js/barcode.js` | Lector de códigos EAN-13 / EAN-8 sin librerías externas |
 | `js/off.js` | Consulta a Open Food Facts |
 | `js/store.js` | Guardado en el teléfono (IndexedDB) |
