@@ -4,7 +4,7 @@ import { offProduct, offSearch } from './off.js';
 import { decodeGray, imageDataToGray, checksumOk } from './barcode.js';
 import { MUSCLES, MUSCLE_NAME, EXERCISES, EXERCISES_BY_ID, e1rm } from './exercises.js';
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 const MEALS = [
   ['desayuno', 'Desayuno'],
@@ -48,7 +48,7 @@ function dayLabel(s) {
 /* ---------- estado ---------- */
 
 const S = {
-  settings: { goals: { kcal: null, p: null, c: null, f: null, steps: null }, lastBackup: null },
+  settings: { goals: { kcal: null, p: null, c: null, f: null, steps: null }, lastBackup: null, rest: 120, restSound: true, restByEx: {} },
   foods: {},
   recipes: {},
   days: {},
@@ -97,7 +97,7 @@ function saveDay(date) {
 
 async function loadState() {
   const all = await store.loadAll();
-  if (all.settings) S.settings = { ...S.settings, ...all.settings, goals: { ...S.settings.goals, ...(all.settings.goals || {}) } };
+  if (all.settings) S.settings = { ...S.settings, ...all.settings, goals: { ...S.settings.goals, ...(all.settings.goals || {}) }, restByEx: { ...(all.settings.restByEx || {}) } };
   S.foods = all.foods || {};
   S.recipes = all.recipes || {};
   S.weights = all.weights || {};
@@ -662,6 +662,15 @@ function viewAjustes() {
       <button type="button" class="btn ghost" data-act="import">Restaurar una copia…</button>
     </div>
     <p class="hint">La copia completa sirve para restaurar todo si cambias de móvil o borras la app. Los .csv se abren en Excel.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Descanso entre series</h2></div>
+    <p class="muted">El cronómetro arranca solo al marcar una serie como hecha. Si cambias el tiempo durante un ejercicio, la app lo recuerda para ese ejercicio.</p>
+    <div class="field top-gap"><span>Por defecto</span>
+      <div class="chips">${[60, 90, 120, 150, 180, 240].map((v) => `<button type="button" class="chip${S.settings.rest === v ? ' on' : ''}" data-act="rest-default" data-s="${v}" aria-pressed="${S.settings.rest === v}">${restLabel(v)}</button>`).join('')}</div>
+    </div>
+    <label class="check"><input type="checkbox" id="rest-sound" data-change="rest-sound" ${S.settings.restSound ? 'checked' : ''}> Avisar con sonido al terminar</label>
   </section>
 
   <section class="card">
@@ -1440,6 +1449,7 @@ SHEETS.workout = {
       <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen.</p>
       <div class="sheet-actions">
         <button type="button" class="btn danger ghost" data-act="wk-del">Borrar</button>
+        ${w.exercises.length && !w.routineId ? '<button type="button" class="btn ghost" data-act="wk-to-routine">Crear rutina</button>' : ''}
         <button type="button" class="btn primary" data-act="wk-finish">${w.end ? 'Hecho' : 'Terminar'}</button>
       </div>`;
   },
@@ -1639,6 +1649,128 @@ async function exportCsvEntrenos() {
   }
   await deliverFile(`fitness-entrenos-${today()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
 }
+
+
+/* ---------- cronómetro de descanso ---------- */
+
+const restLabel = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+let rest = null; // { end, total, exId, name, timer, finished }
+let audioCtx = null;
+let wakeLock = null;
+
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { audioCtx = null; }
+}
+
+function beep() {
+  if (!S.settings.restSound || !audioCtx) return;
+  try {
+    const t0 = audioCtx.currentTime;
+    [0, 0.22, 0.44].forEach((d, i) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.frequency.value = i === 2 ? 1320 : 880;
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.35, t0 + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.18);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t0 + d);
+      o.stop(t0 + d + 0.2);
+    });
+  } catch (e) { /* sin audio */ }
+}
+
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (e) { wakeLock = null; }
+}
+
+function restEl() {
+  let el = $('#rest-timer');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'rest-timer';
+    el.setAttribute('role', 'timer');
+    el.hidden = true;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function startRest(exId, name) {
+  unlockAudio();
+  const total = S.settings.restByEx?.[exId] || S.settings.rest || 120;
+  if (rest?.timer) clearInterval(rest.timer);
+  rest = { end: Date.now() + total * 1000, total, exId, name, finished: false, timer: null };
+  rest.timer = setInterval(tickRest, 250);
+  keepAwake(true);
+  drawRest();
+}
+
+function adjustRest(delta) {
+  if (!rest) return;
+  rest.end += delta * 1000;
+  rest.total = Math.max(15, rest.total + delta);
+  // Recuerda el nuevo tiempo para este ejercicio
+  S.settings.restByEx = { ...(S.settings.restByEx || {}), [rest.exId]: rest.total };
+  saveSettings();
+  if (rest.end <= Date.now()) rest.end = Date.now() + 1000;
+  rest.finished = false;
+  drawRest();
+}
+
+function stopRest() {
+  if (rest?.timer) clearInterval(rest.timer);
+  rest = null;
+  restEl().hidden = true;
+  document.body.classList.remove('resting');
+  keepAwake(false);
+}
+
+function tickRest() {
+  if (!rest) return;
+  const left = (rest.end - Date.now()) / 1000;
+  if (left <= 0 && !rest.finished) {
+    rest.finished = true;
+    beep();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    setTimeout(() => { if (rest?.finished) stopRest(); }, 6000);
+  }
+  drawRest();
+}
+
+function drawRest() {
+  const el = restEl();
+  if (!rest) { el.hidden = true; return; }
+  const left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
+  const pct = Math.min(100, (1 - left / rest.total) * 100);
+  const html = rest.finished
+    ? `<div class="rest-main"><span class="rest-label">Descanso terminado</span><span class="rest-time">¡Siguiente serie!</span></div>
+       <button type="button" class="rest-btn" data-act="rest-skip">Cerrar</button>`
+    : `<div class="rest-main"><span class="rest-label">Descanso · ${esc(rest.name)}</span><span class="rest-time">${restLabel(left)}</span></div>
+       <button type="button" class="rest-btn" data-act="rest-add" data-d="-15" aria-label="Quitar 15 segundos">−15</button>
+       <button type="button" class="rest-btn" data-act="rest-add" data-d="15" aria-label="Añadir 15 segundos">+15</button>
+       <button type="button" class="rest-btn" data-act="rest-skip">Saltar</button>`;
+  if (el.dataset.html !== html) { el.innerHTML = html + '<span class="rest-progress"></span>'; el.dataset.html = html; }
+  el.querySelector('.rest-progress').style.width = `${pct}%`;
+  el.classList.toggle('finished', rest.finished);
+  el.hidden = false;
+  document.body.classList.add('resting');
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && rest) { tickRest(); if (!rest?.finished) keepAwake(true); }
+});
 
 /* ---------- exportar e importar ---------- */
 
@@ -1893,6 +2025,7 @@ document.addEventListener('click', async (ev) => {
           const repIn = $(`[data-input="set-reps"][data-i="${i}"][data-j="${j}"]`);
           if (st.kg == null && kgIn) st.kg = num(kgIn.placeholder);
           if (st.reps == null && repIn) { const r = num(repIn.placeholder); st.reps = r == null ? null : Math.round(r); }
+          startRest(we.exId, exName(we));
         }
       }
       saveWorkout(w.id);
@@ -1913,6 +2046,21 @@ document.addEventListener('click', async (ev) => {
       w.exercises.splice(Number(el.dataset.i), 1);
       saveWorkout(w.id);
       renderSheets();
+      break;
+    }
+    case 'wk-to-routine': {
+      const w = S.workouts[top.id];
+      const items = w.exercises.map((we) => ({ exId: we.exId, sets: Math.max(1, we.sets.filter((x) => x.t !== 'w').length) }));
+      pushSheet({ type: 'routine', isNew: true, draft: { id: uid(), name: w.name === 'Entrenamiento' ? '' : w.name, items } });
+      break;
+    }
+    case 'rest-add': adjustRest(Number(el.dataset.d)); break;
+    case 'rest-skip': stopRest(); break;
+    case 'rest-default': {
+      S.settings.rest = Number(el.dataset.s);
+      saveSettings();
+      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      toast(`Descanso por defecto: ${restLabel(S.settings.rest)}`);
       break;
     }
     case 'wk-ex-add': pushSheet({ type: 'ex-picker', mode: 'workout', target: top, q: '', muscle: '' }); break;
@@ -2044,6 +2192,7 @@ document.addEventListener('change', (ev) => {
     return;
   }
   const kind = el.dataset.change;
+  if (kind === 'rest-sound') { S.settings.restSound = el.checked; saveSettings(); return; }
   if (kind === 'wk-date') {
     const top = S.sheets[S.sheets.length - 1];
     const w = S.workouts[top?.id];

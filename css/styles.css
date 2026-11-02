@@ -607,6 +607,39 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .sheet.still, .backdrop.still { animation: none; }
 @media (max-width: 360px) { .vol-row { grid-template-columns: 112px minmax(0, 1fr) 36px; } .vol-name { font-size: var(--step--1); } }
 
+/* ---------- cronómetro de descanso ---------- */
+#rest-timer {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  z-index: 55;
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 16px;
+  padding: 10px 10px 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+#rest-timer.finished { background: var(--accent); color: var(--accent-ink); }
+.rest-main { flex: 1; display: grid; min-width: 0; }
+.rest-label { font-size: 0.75rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rest-time { font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 2rem; line-height: 1.05; }
+.rest-btn { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 10px; min-width: 50px; min-height: 42px; font-weight: 700; padding: 0 8px; }
+.rest-progress { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--accent); transition: width 0.25s linear; }
+#rest-timer.finished .rest-progress { background: var(--accent-ink); }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 12px; min-height: 44px; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+body.resting .sheet-body { padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+body.resting .sheet-actions { padding-bottom: 76px; }
+body.resting #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 170px); }
+.sheet-actions .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+
 @keyframes rise { from { transform: translateY(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
