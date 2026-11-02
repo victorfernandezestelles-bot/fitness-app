@@ -3,8 +3,9 @@ import * as store from './store.js';
 import { offProduct, offSearch } from './off.js';
 import { decodeGray, imageDataToGray, checksumOk } from './barcode.js';
 import { MUSCLES, MUSCLE_NAME, EXERCISES, EXERCISES_BY_ID, e1rm, defaultCfg } from './exercises.js';
+import { TEMPLATES } from './templates.js';
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.4.1';
 
 const MEALS = [
   ['desayuno', 'Desayuno'],
@@ -1548,7 +1549,7 @@ function viewEntreno() {
       <span class="eyebrow">En curso</span>
       <b>${esc(open.name)}</b>
       <span class="muted">${open.exercises.length} ejercicios · ${workoutStats(open).sets} series hechas · toca para seguir</span>
-    </button>` : `<button type="button" class="btn wide big" data-act="start-workout">Empezar entrenamiento</button>`}
+    </button>` : `<button type="button" class="btn wide big" data-act="start-workout">Empezar entrenamiento${nextInRotation() ? ` · toca ${esc(nextInRotation().name)}` : ''}</button>`}
 
   <div class="btn-row two">
     <button type="button" class="btn ghost" data-act="open-routines">Rutinas</button>
@@ -1582,13 +1583,32 @@ function viewEntreno() {
   </section>`;
 }
 
+// Siguiente rutina de una rotación (A1, B1, A2…): avanza por sesiones hechas, no por días
+function nextInRotation() {
+  const grouped = Object.values(S.routines).filter((r) => r.group);
+  if (!grouped.length) return null;
+  let group = grouped[0].group;
+  let lastSeq = -1;
+  for (const w of workoutsSorted()) {
+    const r = w.routineId && S.routines[w.routineId];
+    if (r && r.group) { group = r.group; lastSeq = r.seq; break; }
+  }
+  const inGroup = grouped.filter((r) => r.group === group).sort((a, b) => a.seq - b.seq);
+  return inGroup.find((r) => r.seq > lastSeq) || inGroup[0];
+}
+
 /* Empezar: vacío o desde una rutina */
 SHEETS.start = {
   title: () => 'Empezar entrenamiento',
   render: () => {
-    const routines = Object.values(S.routines).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const routines = Object.values(S.routines).sort((a, b) => (a.group || '').localeCompare(b.group || '') || (a.seq ?? 0) - (b.seq ?? 0) || a.name.localeCompare(b.name, 'es'));
+    const next = nextInRotation();
     return `
-      <button type="button" class="btn wide" data-act="start-empty">Entrenamiento vacío</button>
+      ${next ? `<button type="button" class="repeat-btn" data-act="start-routine" data-id="${next.id}">
+          <b>Te toca: ${esc(next.name)}</b>
+          <span>${next.items.length} ejercicios · ${next.items.reduce((a, it) => a + (it.sets || 0), 0)} series</span>
+        </button>` : ''}
+      <button type="button" class="btn ${next ? 'ghost ' : ''}wide top-gap" data-act="start-empty">Entrenamiento vacío</button>
       <h3 class="list-title">Desde una rutina</h3>
       ${routines.length ? `<ul class="list">${routines.map((r) => `<li><button type="button" class="row" data-act="start-routine" data-id="${r.id}">
         <span class="row-main">${esc(r.name)}</span>
@@ -1832,9 +1852,19 @@ function drawExChart(exId) {
 SHEETS.routines = {
   title: () => 'Rutinas',
   render: () => {
-    const list = Object.values(S.routines).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const list = Object.values(S.routines).sort((a, b) => (a.group || '').localeCompare(b.group || '') || (a.seq ?? 0) - (b.seq ?? 0) || a.name.localeCompare(b.name, 'es'));
+    const tpls = TEMPLATES.map((t) => {
+      const added = Object.values(S.routines).some((r) => r.group === t.id);
+      return `<div class="tpl">
+        <div><b>${esc(t.name)}</b><p class="muted small-text">${esc(t.description)}</p></div>
+        ${added ? '<span class="tag">añadida</span>' : `<button type="button" class="btn small" data-act="tpl-add" data-id="${t.id}">Añadir</button>`}
+      </div>`;
+    }).join('');
     return `
       <button type="button" class="btn wide" data-act="routine-new">Nueva rutina</button>
+      <h3 class="list-title">Plantillas</h3>
+      ${tpls}
+      <h3 class="list-title">Tus rutinas</h3>
       ${list.length ? `<ul class="list top-gap">${list.map((r) => `<li><button type="button" class="row" data-act="routine-open" data-id="${r.id}">
         <span class="row-main">${esc(r.name)}</span>
         <span class="row-sub">${r.items.map((it) => esc(getEx(it.exId)?.name || '')).join(', ') || 'Sin ejercicios'}</span>
@@ -2731,6 +2761,19 @@ document.addEventListener('click', async (ev) => {
       const id = top.draft.id;
       pushSheet({ type: 'confirm', title: 'Borrar ejercicio', text: `¿Borrar «${top.draft.name}»? Los entrenamientos donde aparece lo conservan con su nombre, pero ya no contará para el volumen por músculo.`, ok: 'Borrar', danger: true,
         onOk: () => { delete S.exercises[id]; saveExercises(); closeSheets(); toast('Ejercicio borrado'); } });
+      break;
+    }
+    case 'tpl-add': {
+      const t = TEMPLATES.find((x) => x.id === el.dataset.id);
+      if (!t) break;
+      for (const r of t.routines) {
+        if (Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq)) continue;
+        const id = uid();
+        S.routines[id] = { id, name: r.name, group: t.id, seq: r.seq, items: structuredClone(r.items) };
+      }
+      saveRoutines();
+      renderSheets();
+      toast(`${t.routines.length} rutinas añadidas`);
       break;
     }
     case 'routine-new': pushSheet({ type: 'routine', isNew: true, draft: { id: uid(), name: '', items: [] } }); break;
