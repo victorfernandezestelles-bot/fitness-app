@@ -1,10 +1,10 @@
 import { BASICS, BASICS_BY_ID, KEYS, MACROS, MICROS, kcalFrom, mult, sumNut } from './nutrients.js';
 import { offProduct, offSearch } from './off.js';
 import { checksumOk, decodeGray, imageDataToGray } from './barcode.js';
-import { $, addDays, dateLong, dayLabel, esc, fmt, inputVal, norm, num, today, uid } from './util.js';
-import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveWeights } from './state.js';
-import { allFoods, dayOf, ensureDay, getFood, goalsFor, hasTrainGoals, isTrainDay, itemName, needsBackup, nutFor, qtyLabel, recentItems, recipeTotals } from './derived.js';
-import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
+import { $, addDays, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plural, today, uid } from './util.js';
+import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
+import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, qtyLabel, recentItems, recipeTotals } from './derived.js';
+import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
 
 /* ---------- vista: Hoy ---------- */
 
@@ -32,24 +32,31 @@ export function viewHoy() {
       ${bar(tot[k] || 0, g[k], cls)}
     </div>`;
 
-  const meals = MEALS.map(([key, label]) => {
+  const filled = MEALS.filter(([key]) => day.entries.some((e) => e.meal === key));
+  const empty = MEALS.filter(([key]) => !day.entries.some((e) => e.meal === key));
+  const meals = filled.map(([key, label]) => {
     const list = day.entries.filter((e) => e.meal === key);
     const mk = list.reduce((a, e) => a + (e.n.kcal || 0), 0);
     return `
     <section class="meal">
       <div class="meal-head">
         <h2>${label}</h2>
-        ${list.length ? `<span class="meal-kcal">${fmt(mk)} kcal</span>` : ''}
+        <span class="meal-kcal">${fmt(mk)} kcal</span>
         <button class="btn-add" type="button" data-act="add" data-meal="${key}" aria-label="Añadir a ${label}">+ Añadir</button>
       </div>
-      ${list.length ? `<ul class="entries">${list.map((e) => `
+      <ul class="entries">${list.map((e) => `
         <li><button class="entry" type="button" data-act="edit-entry" data-id="${e.id}">
           <span class="e-name">${esc(e.name)}</span>
           <span class="e-kcal">${fmt(e.n.kcal)}</span>
           <span class="e-sub">${qtyLabel(e.qty, e.unit)} · P ${fmt(e.n.p, 0)} · H ${fmt(e.n.c, 0)} · G ${fmt(e.n.f, 0)}</span>
-        </button></li>`).join('')}</ul>` : ''}
+        </button></li>`).join('')}</ul>
     </section>`;
-  }).join('');
+  }).join('') + (empty.length ? `
+    <section class="meal-empty" aria-label="Comidas sin apuntar">
+      <span class="eyebrow">${filled.length ? 'Sin apuntar' : 'Aún no has apuntado nada'}</span>
+      <div class="chips">${empty.map(([key, label]) => `<button type="button" class="chip" data-act="add" data-meal="${key}" aria-label="Añadir a ${label}">+ ${label}</button>`).join('')}</div>
+    </section>` : '');
+  const fabMeal = date === today() ? guessMeal() : (empty[0]?.[0] || 'comida');
 
   const detailRows = [...MACROS.slice(1), ...MICROS].map((n) => {
     const partial = count && have[n.k] < count;
@@ -66,9 +73,11 @@ export function viewHoy() {
   return `
   <header class="topbar">
     <button class="icon-btn" type="button" data-act="day-prev" aria-label="Día anterior">‹</button>
-    <button class="topbar-title" type="button" data-act="day-today">${dayLabel(date)}<small>${date === today() ? dateLong(date) : (date > today() ? '' : 'Volver a hoy')}</small></button>
+    <button class="topbar-title" type="button" data-act="calendar" aria-label="${dayLabel(date)}, ${dateLong(date)}. Abrir el calendario">${dayLabel(date)}<small>${norm(dayLabel(date)) === norm(dateLong(date)) ? 'Calendario' : dateLong(date)} <span aria-hidden="true">▾</span></small></button>
     <button class="icon-btn" type="button" data-act="day-next" aria-label="Día siguiente">›</button>
   </header>
+
+  ${date !== today() ? '<div class="back-today"><button type="button" class="btn ghost small" data-act="day-today">Volver a hoy</button></div>' : ''}
 
   ${backupDue ? `<div class="notice"><p>Hace más de una semana que no guardas una copia de tus datos.</p><button type="button" class="btn small" data-act="export-json">Guardar copia</button></div>` : ''}
 
@@ -106,11 +115,17 @@ export function viewHoy() {
       <input id="weight-in" type="text" inputmode="decimal" enterkeyhint="done" placeholder="kg" value="${inputVal(weight, 2)}" data-change="weight">
       <small>kg</small>
     </label>
+    <label class="quick-field">
+      <span>Sueño</span>
+      <input id="sleep-in" type="text" inputmode="decimal" enterkeyhint="done" placeholder="h" value="${inputVal(day.sleep, 2)}" data-change="sleep">
+      <small>h</small>
+    </label>
   </section>
 
   ${meals}
 
   <button type="button" class="btn ghost wide top-gap" data-act="copy-open" data-mode="day">Copiar las comidas de otro día…</button>
+  <button type="button" class="fab" data-act="add" data-meal="${fabMeal}" aria-label="Añadir a ${MEAL_NAME[fabMeal]}">+ Añadir <small>${MEAL_NAME[fabMeal]}</small></button>
 
   <details class="detail">
     <summary>Información nutricional completa</summary>
@@ -121,7 +136,8 @@ export function viewHoy() {
       </table>
     </div>
     <p class="hint">% VRN: porcentaje del valor de referencia de nutrientes de la UE para un adulto.${anyPartial ? ' * Algún alimento de hoy no tiene ese dato, así que el total real es mayor.' : ''}</p>
-  </details>`;
+  </details>
+  <div class="fab-space"></div>`;
 }
 
 /* ---------- vista: Alimentos ---------- */
@@ -197,6 +213,54 @@ export function foodRow(f, act, extra = '') {
   </button></li>`;
 }
 
+/* Calendario de cumplimiento */
+SHEETS.calendar = {
+  title: () => 'Calendario',
+  render: (s) => {
+    const [y, m] = s.month.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const lead = (first.getDay() + 6) % 7;
+    const nDays = new Date(y, m, 0).getDate();
+    const t = today();
+    const mn = first.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const monthName = mn.charAt(0).toUpperCase() + mn.slice(1);
+    const hasK = S.settings.goals.kcal != null;
+    const hasS = S.settings.goals.steps != null;
+    let cells = '';
+    for (let i = 0; i < lead; i++) cells += '<span class="cal-cell pad"></span>';
+    const count = { kcal: 0, steps: 0, train: 0 };
+    for (let dnum = 1; dnum <= nDays; dnum++) {
+      const d = `${s.month}-${String(dnum).padStart(2, '0')}`;
+      const future = d > t;
+      const mk = future ? {} : dayMarks(d);
+      for (const k of Object.keys(count)) if (mk[k]) count[k]++;
+      const label = [dateLong(d), mk.kcal && 'calorías en objetivo', mk.steps && 'pasos cumplidos', mk.train && 'entrenado'].filter(Boolean).join(', ');
+      cells += `<button type="button" class="cal-cell${d === t ? ' today' : ''}${d === S.ui.date ? ' sel' : ''}${future ? ' future' : ''}" data-act="cal-day" data-d="${d}" aria-label="${label}" ${future ? 'disabled' : ''}>
+        <span class="cal-n">${dnum}</span>
+        <span class="cal-dots" aria-hidden="true">${mk.kcal ? '<i class="d-kcal"></i>' : ''}${mk.steps ? '<i class="d-steps"></i>' : ''}${mk.train ? '<i class="d-train"></i>' : ''}</span>
+      </button>`;
+    }
+    const nextOff = s.month >= t.slice(0, 7);
+    return `
+      <div class="cal-nav">
+        <button type="button" class="icon-btn" data-act="cal-month" data-d="-1" aria-label="Mes anterior">‹</button>
+        <h3 class="cal-title">${monthName}</h3>
+        <button type="button" class="icon-btn" data-act="cal-month" data-d="1" aria-label="Mes siguiente" ${nextOff ? 'disabled' : ''}>›</button>
+      </div>
+      <div class="cal-grid" role="grid">
+        ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-wd" aria-hidden="true">${d}</span>`).join('')}
+        ${cells}
+      </div>
+      <ul class="cal-legend">
+        <li><i class="d-kcal"></i> Calorías a ±10 % del objetivo <b>${hasK ? plural(count.kcal, 'día', 'días') : '–'}</b></li>
+        <li><i class="d-steps"></i> Pasos cumplidos <b>${hasS ? plural(count.steps, 'día', 'días') : '–'}</b></li>
+        <li><i class="d-train"></i> Entrenamiento (fuerza o cardio) <b>${plural(count.train, 'día', 'días')}</b></li>
+      </ul>
+      ${!hasK || !hasS ? `<p class="hint">${!hasK && !hasS ? 'Pon objetivos de calorías y pasos' : !hasK ? 'Pon un objetivo de calorías' : 'Pon un objetivo de pasos'} en Ajustes para ver esos puntos.</p>` : ''}
+      <div class="sheet-actions"><button type="button" class="btn ghost" data-act="cal-today">Ir a hoy</button></div>`;
+  },
+};
+
 /* Selector de alimentos (para el diario o para una receta) */
 SHEETS.picker = {
   title: (s) => (s.mode === 'recipe' ? 'Añadir ingrediente' : `Añadir a ${MEAL_NAME[s.meal]}`),
@@ -221,6 +285,17 @@ export function fillPickList(s) {
   const q = norm(s.q || '');
   let html = '';
   if (!q && s.mode === 'diary') {
+    const favs = favItems();
+    if (favs.length) {
+      html += `<h3 class="list-title">Favoritos</h3><ul class="list">${favs.map((r) => {
+        const n = nutFor(r, r.qty ?? defaultQty(r), r.unit ?? defaultUnit(r));
+        return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" ${r.qty != null ? `data-qty="${r.qty}" data-unit="${r.unit}"` : ''}>
+          <span class="row-main"><span class="star" aria-hidden="true">★</span> ${esc(itemName(r))}</span>
+          <span class="row-sub">${r.qty != null ? qtyLabel(r.qty, r.unit) + ' la última vez' : (r.type === 'recipe' ? 'Receta' : 'Alimento')}</span>
+          <span class="row-side">${fmt(n?.kcal)} <small>kcal</small></span>
+        </button></li>`;
+      }).join('')}</ul>`;
+    }
     const rec = recentItems();
     s.recent = rec;
     if (rec.length) {
@@ -439,6 +514,7 @@ SHEETS.qty = {
     return `
       ${s.entryId ? `<p class="sheet-sub"><b>${esc(itemName(it))}</b></p>` : ''}
       <p class="sheet-sub">${base}</p>
+      <button type="button" class="fav-btn${isFav(it.type, it.id) ? ' on' : ''}" data-act="fav" aria-pressed="${isFav(it.type, it.id)}">${isFav(it.type, it.id) ? '★ En favoritos' : '☆ Añadir a favoritos'}</button>
       ${unitToggle}
       <div class="qty-row">
         <input id="qty-in" type="text" inputmode="decimal" value="${inputVal(qty, 2)}" data-input="qty" aria-label="Cantidad">
@@ -789,6 +865,23 @@ Object.assign(ACTIONS, {
   'day-today': async (el, top, act) => {
       S.ui.date = today(); render();
   },
+  'calendar': () => pushSheet({ type: 'calendar', month: S.ui.date.slice(0, 7) }),
+  'cal-month': (el, top) => {
+    const [y, m] = top.month.split('-').map(Number);
+    const d = new Date(y, m - 1 + Number(el.dataset.d), 1);
+    top.month = iso(d).slice(0, 7);
+    renderSheets();
+  },
+  'cal-day': (el) => { S.ui.date = el.dataset.d; closeSheets(); setTab('hoy'); },
+  'cal-today': () => { S.ui.date = today(); closeSheets(); setTab('hoy'); },
+  'fav': (el, top) => {
+    const k = favKey(top.item.type, top.item.id);
+    const favs = { ...(S.settings.favs || {}) };
+    if (favs[k]) delete favs[k]; else favs[k] = true;
+    S.settings.favs = favs;
+    saveSettings();
+    renderSheets();
+  },
   'add': async (el, top, act) => {
       pushSheet({ type: 'picker', mode: 'diary', meal: el.dataset.meal, date: S.ui.date, q: '' });
   },
@@ -982,6 +1075,17 @@ Object.assign(CHANGES, {
     day.steps = v == null ? null : Math.round(v);
     saveDay(S.ui.date);
     toast(v == null ? 'Pasos borrados' : 'Pasos guardados');
+  },
+  sleep: (el) => {
+    let v = num(el.value);
+    if (v != null && (v < 0 || v > 24)) { toast('Pon las horas dormidas, de 0 a 24.'); return; }
+    if (v != null) v = Math.round(v * 4) / 4;
+    const day = ensureDay(S.ui.date);
+    day.sleep = v;
+    if (v == null) delete day.sleep;
+    saveDay(S.ui.date);
+    el.value = inputVal(v, 2);
+    toast(v == null ? 'Sueño borrado' : 'Sueño guardado');
   },
   weight: (el) => {
     const v = num(el.value);

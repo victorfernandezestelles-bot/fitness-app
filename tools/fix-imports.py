@@ -8,9 +8,9 @@ para evitar ciclos en la carga: util < state < derived < ui < secciones < app.
 import re, os, collections
 
 JS = os.path.join(os.path.dirname(__file__), '..', 'js')
-APP_MODULES = ['util', 'state', 'derived', 'ui', 'food', 'training', 'progress', 'settings', 'app']
+APP_MODULES = ['util', 'state', 'derived', 'ui', 'food', 'training', 'progress', 'settings', 'onboarding', 'app']
 LIBS = ['nutrients', 'off', 'barcode', 'exercises', 'templates']
-LAYER = {'util': 0, 'state': 1, 'derived': 2, 'ui': 3, 'food': 4, 'training': 4, 'progress': 4, 'settings': 4, 'app': 5}
+LAYER = {'util': 0, 'state': 1, 'derived': 2, 'ui': 3, 'food': 4, 'training': 4, 'progress': 4, 'settings': 4, 'onboarding': 4, 'app': 5}
 decl = re.compile(r'^export (?:async function|function|const|let|class) ([A-Za-z_$][\w$]*)', re.M)
 
 def strip(code):

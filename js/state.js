@@ -23,6 +23,7 @@ export const defaultSettings = () => ({
   theme: 'auto',
   lastBackup: null, rest: 120, restSound: true, restByEx: {}, exCfg: {},
   keepAwake: true, showRir: true, exNotes: {},
+  favs: {}, onboarded: false, textSize: 'system', bigButtons: false,
 });
 
 export const S = {
@@ -182,7 +183,7 @@ export const saveWorkout = (id) => persist('wk:' + id, () => S.workouts[id] || n
 export function saveDay(date) {
   persist('day:' + date, () => {
     const d = S.days[date];
-    if (!d || (!d.entries.length && d.steps == null && !d.type)) { delete S.days[date]; return null; }
+    if (!d || (!d.entries.length && d.steps == null && d.sleep == null && !d.type)) { delete S.days[date]; return null; }
     return d;
   });
 }

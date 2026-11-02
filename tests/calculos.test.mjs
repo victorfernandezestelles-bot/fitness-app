@@ -6,6 +6,7 @@ import { S, migrate, SCHEMA, mergeSettings } from '../js/state.js';
 import {
   recipeTotals, nutFor, weekVolume, suggestion, dataEnergy, navyBodyFat, weeklyWeights,
   isTrainDay, goalsFor, workoutDuration, nextInRotation, workoutStats, lastPerformance,
+  dayMarks, guessMeal, favItems,
 } from '../js/derived.js';
 import { kcalFrom, scale, sumNut } from '../js/nutrients.js';
 import { defaultCfg, EXERCISES_BY_ID, e1rm } from '../js/exercises.js';
@@ -177,4 +178,45 @@ test('migración: completa datos antiguos sin perder nada y es repetible', () =>
   assert.equal(old.days['2026-10-01'].entries[0].id, undefined, 'no modifica el original');
   const again = migrate(m, SCHEMA);
   assert.deepEqual(again.days, m.days);
+});
+
+test('calendario: calorías a ±10 %, pasos cumplidos y entreno', () => {
+  reset();
+  S.settings.goals = { kcal: 2000, p: null, c: null, f: null, steps: 10000 };
+  const d = '2026-10-20';
+  S.days[d] = { entries: [{ n: { kcal: 2150 } }], steps: 9999 };
+  assert.deepEqual(dayMarks(d), { kcal: true, steps: false, train: false });
+  S.days[d].entries[0].n.kcal = 2250;
+  S.days[d].steps = 10000;
+  S.workouts.w = { id: 'w', date: d, exercises: [{ exId: 'x-katana', sets: [] }] };
+  assert.deepEqual(dayMarks(d), { kcal: false, steps: true, train: true });
+  // Un entreno vacío (empezado y sin ejercicios) no cuenta
+  S.workouts.w.exercises = [];
+  assert.equal(dayMarks(d).train, false);
+  // Sin objetivo no hay punto
+  S.settings.goals.kcal = null;
+  S.days[d].entries[0].n.kcal = 2000;
+  assert.equal(dayMarks(d).kcal, false);
+});
+
+test('la comida que toca según la hora', () => {
+  const at = (h, m = 0) => guessMeal(new Date(2026, 10, 2, h, m));
+  assert.equal(at(8), 'desayuno');
+  assert.equal(at(14), 'comida');
+  assert.equal(at(17), 'merienda');
+  assert.equal(at(21), 'cena');
+  assert.equal(at(1), 'otros');
+});
+
+test('favoritos: con la cantidad de la última vez y sin los borrados', () => {
+  reset();
+  S.foods.yog = { id: 'yog', name: 'Yogur', per100: { kcal: 60 } };
+  S.recipes.r = { id: 'r', name: 'Arroz con pollo', servings: 2, items: [] };
+  S.settings.favs = { 'food:yog': true, 'recipe:r': true, 'food:borrado': true };
+  S.days['2026-10-30'] = { entries: [{ type: 'food', ref: 'yog', qty: 125, unit: 'g', n: { kcal: 75 } }] };
+  const f = favItems();
+  assert.equal(f.length, 2);
+  assert.deepEqual(f.map((x) => x.id), ['r', 'yog']);
+  assert.equal(f.find((x) => x.id === 'yog').qty, 125);
+  assert.equal(f.find((x) => x.id === 'r').qty, null);
 });

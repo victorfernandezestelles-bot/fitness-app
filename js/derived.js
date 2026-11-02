@@ -64,6 +64,52 @@ export function itemName(item) {
 
 export const qtyLabel = (qty, unit) => (unit === 'ud' ? 'a mano' : unit === 'rac' ? `${fmt(qty, 2)} ${qty === 1 ? 'ración' : 'raciones'}` : `${fmt(qty, 0)} g`);
 
+/* ---------- favoritos ---------- */
+export const favKey = (type, id) => `${type}:${id}`;
+export const isFav = (type, id) => !!S.settings.favs?.[favKey(type, id)];
+export function favItems() {
+  const rec = recentItems(60);
+  return Object.keys(S.settings.favs || {}).map((k) => {
+    const i = k.indexOf(':');
+    const type = k.slice(0, i), id = k.slice(i + 1);
+    if (type === 'food' ? !getFood(id) : !S.recipes[id]) return null;
+    const last = rec.find((r) => r.type === type && r.id === id);
+    return { type, id, qty: last?.qty ?? null, unit: last?.unit ?? null };
+  }).filter(Boolean).sort((a, b) => itemName(a).localeCompare(itemName(b), 'es'));
+}
+
+// Cantidad por defecto al apuntar algo (la misma que propone la hoja de cantidad)
+export const defaultUnit = (it) => (it.type === 'food' ? 'g' : 'rac');
+export const defaultQty = (it) => (it.type === 'food' ? getFood(it.id)?.servingG || 100 : 1);
+
+/* ---------- calendario de cumplimiento ---------- */
+export const dayKcal = (date) => dayOf(date).entries.reduce((a, e) => a + (e.n.kcal || 0), 0);
+// Día entrenado de verdad: un entrenamiento de fuerza con algo apuntado o una actividad
+export function trainedOn(date) {
+  if (Object.values(S.workouts).some((w) => w.date === date && w.exercises.length)) return true;
+  return Object.values(S.activities || {}).some((a) => a.date === date);
+}
+export function dayMarks(date) {
+  const day = dayOf(date);
+  const g = goalsFor(date);
+  const kcal = dayKcal(date);
+  return {
+    kcal: !!(g.kcal && day.entries.length && Math.abs(kcal - g.kcal) <= g.kcal * 0.1),
+    steps: !!(g.steps && day.steps != null && day.steps >= g.steps),
+    train: trainedOn(date),
+  };
+}
+
+// La comida que toca según la hora
+export function guessMeal(d = new Date()) {
+  const h = d.getHours() + d.getMinutes() / 60;
+  if (h >= 5 && h < 11) return 'desayuno';
+  if (h >= 11 && h < 16.5) return 'comida';
+  if (h >= 16.5 && h < 20) return 'merienda';
+  if (h >= 20 && h < 23.5) return 'cena';
+  return 'otros';
+}
+
 export function recentItems(limit = 12) {
   const out = [];
   const seen = new Set();

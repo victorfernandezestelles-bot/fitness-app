@@ -23,7 +23,11 @@ export function viewAjustes() {
   return `
   <header class="page-head"><h1>Ajustes</h1></header>
 
-  <section class="card">
+  <nav class="chips scroll aj-nav" aria-label="Secciones de ajustes">
+    ${[['objetivos', 'Objetivos'], ['cuerpo', 'Tu cuerpo'], ['entreno', 'Entreno'], ['apariencia', 'Apariencia'], ['datos', 'Datos']].map(([k, l]) => `<button type="button" class="chip" data-act="aj-jump" data-k="${k}">${l}</button>`).join('')}
+  </nav>
+
+  <section class="card" id="aj-objetivos">
     <div class="card-head"><h2>Objetivos diarios</h2></div>
     <form data-form="goals" class="form-grid">
       ${field('g-kcal', 'Calorías', g.kcal, 'kcal')}
@@ -44,7 +48,8 @@ export function viewAjustes() {
     </form>
   </section>
 
-  <section class="card">
+
+  <section class="card" id="aj-cuerpo">
     <div class="card-head"><h2>Tu cuerpo</h2></div>
     <p class="muted">Sirve para estimar tu gasto calórico mientras no haya datos suficientes y para el % de grasa a partir de las medidas.</p>
     <form data-form="profile">
@@ -65,7 +70,36 @@ export function viewAjustes() {
     </form>
   </section>
 
-  <section class="card">
+
+  <section class="card" id="aj-entreno">
+    <div class="card-head"><h2>Entreno</h2></div>
+    <label class="check"><input type="checkbox" data-change="keep-awake" ${S.settings.keepAwake ? 'checked' : ''}> Mantener la pantalla encendida mientras entrenas</label>
+    <label class="check"><input type="checkbox" data-change="show-rir" ${S.settings.showRir !== false ? 'checked' : ''}> Mostrar la columna RIR (repeticiones en reserva)</label>
+    <h3 class="sub-h top-gap">Descanso entre series</h3>
+    <p class="muted">El cronómetro arranca solo al marcar una serie como hecha. Si cambias el tiempo durante un ejercicio, la app lo recuerda para ese ejercicio.</p>
+    <div class="field top-gap"><span>Por defecto</span>
+      <div class="chips">${[60, 90, 120, 150, 180, 240].map((v) => `<button type="button" class="chip${S.settings.rest === v ? ' on' : ''}" data-act="rest-default" data-s="${v}" aria-pressed="${S.settings.rest === v}">${restLabel(v)}</button>`).join('')}</div>
+    </div>
+    <label class="check"><input type="checkbox" id="rest-sound" data-change="rest-sound" ${S.settings.restSound ? 'checked' : ''}> Avisar con sonido al terminar</label>
+  </section>
+
+
+  <section class="card" id="aj-apariencia">
+    <div class="card-head"><h2>Apariencia</h2></div>
+    <div class="chips" role="group" aria-label="Tema">
+      ${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button type="button" class="chip${(S.settings.theme || 'auto') === v ? ' on' : ''}" data-act="theme" data-v="${v}" aria-pressed="${(S.settings.theme || 'auto') === v}">${l}</button>`).join('')}
+    </div>
+    <p class="hint">Automático sigue el modo claro u oscuro del iPhone.</p>
+    <h3 class="sub-h top-gap">Tamaño del texto</h3>
+    <div class="chips" role="group" aria-label="Tamaño del texto">
+      ${[['system', 'El del iPhone'], ['normal', 'Normal'], ['large', 'Grande']].map(([v, l]) => `<button type="button" class="chip${(S.settings.textSize || 'system') === v ? ' on' : ''}" data-act="text-size" data-v="${v}" aria-pressed="${(S.settings.textSize || 'system') === v}">${l}</button>`).join('')}
+    </div>
+    <p class="hint">«El del iPhone» sigue Ajustes › Pantalla y brillo › Tamaño del texto.</p>
+    <label class="check"><input type="checkbox" data-change="big-buttons" ${S.settings.bigButtons ? 'checked' : ''}> Botones más grandes</label>
+  </section>
+
+
+  <section class="card" id="aj-datos">
     <div class="card-head"><h2>Tus datos</h2></div>
     <p class="muted">Se guardan solo en este teléfono: ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
       ${last ? `Última copia: ${dateLong(last.slice(0, 10))}.` : 'Aún no has guardado ninguna copia.'}</p>
@@ -80,27 +114,9 @@ export function viewAjustes() {
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Entreno</h2></div>
-    <label class="check"><input type="checkbox" data-change="keep-awake" ${S.settings.keepAwake ? 'checked' : ''}> Mantener la pantalla encendida mientras entrenas</label>
-    <label class="check"><input type="checkbox" data-change="show-rir" ${S.settings.showRir !== false ? 'checked' : ''}> Mostrar la columna RIR (repeticiones en reserva)</label>
-    <h3 class="sub-h top-gap">Descanso entre series</h3>
-    <p class="muted">El cronómetro arranca solo al marcar una serie como hecha. Si cambias el tiempo durante un ejercicio, la app lo recuerda para ese ejercicio.</p>
-    <div class="field top-gap"><span>Por defecto</span>
-      <div class="chips">${[60, 90, 120, 150, 180, 240].map((v) => `<button type="button" class="chip${S.settings.rest === v ? ' on' : ''}" data-act="rest-default" data-s="${v}" aria-pressed="${S.settings.rest === v}">${restLabel(v)}</button>`).join('')}</div>
-    </div>
-    <label class="check"><input type="checkbox" id="rest-sound" data-change="rest-sound" ${S.settings.restSound ? 'checked' : ''}> Avisar con sonido al terminar</label>
-  </section>
-
-  <section class="card">
-    <div class="card-head"><h2>Apariencia</h2></div>
-    <div class="chips" role="group" aria-label="Tema">
-      ${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button type="button" class="chip${(S.settings.theme || 'auto') === v ? ' on' : ''}" data-act="theme" data-v="${v}" aria-pressed="${(S.settings.theme || 'auto') === v}">${l}</button>`).join('')}
-    </div>
-    <p class="hint">Automático sigue el modo claro u oscuro del iPhone.</p>
-  </section>
-
-  <section class="card">
-    <div class="card-head"><h2>Zona peligrosa</h2></div>
+    <div class="card-head"><h2>Otros</h2></div>
+    <button type="button" class="btn ghost wide" data-act="onboarding">Ver la bienvenida otra vez</button>
+    <h3 class="sub-h top-gap">Zona peligrosa</h3>
     <button type="button" class="btn danger" data-act="wipe">Borrar todos los datos</button>
   </section>
 
@@ -194,6 +210,16 @@ Object.assign(ACTIONS, {
       applyTheme();
       el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
   },
+  'text-size': (el) => {
+      S.settings.textSize = el.dataset.v;
+      saveSettings();
+      applyTheme();
+      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+  },
+  'aj-jump': (el) => {
+      const t = document.getElementById('aj-' + el.dataset.k);
+      if (t) window.scrollTo({ top: t.getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+  },
   'rest-default': async (el, top, act) => {
       S.settings.rest = Number(el.dataset.s);
       saveSettings();
@@ -229,6 +255,7 @@ CHANGES['#import-file'] = (el) => {
   if (f) importFile(f);
 };
 CHANGES['rest-sound'] = (el) => { S.settings.restSound = el.checked; saveSettings(); };
+CHANGES['big-buttons'] = (el) => { S.settings.bigButtons = el.checked; saveSettings(); applyTheme(); };
 CHANGES['keep-awake'] = (el) => { S.settings.keepAwake = el.checked; saveSettings(); };
 CHANGES['show-rir'] = (el) => { S.settings.showRir = el.checked; saveSettings(); };
 

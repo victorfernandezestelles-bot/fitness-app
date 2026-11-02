@@ -1,4 +1,4 @@
-import { $, addDays, dateLong, dateShort, fmt, inputVal, niceStep, num, parseISO, today } from './util.js';
+import { $, addDays, dateLong, dateShort, fmt, inputVal, niceStep, num, parseISO, plural, today } from './util.js';
 import { S, saveMeasures, saveSettings, saveWeights } from './state.js';
 import { KCAL_PER_KG, MEASURES, MEASURE_BY_K, dataEnergy, dayOf, formulaEnergy, latestMeasure, latestWeight, measureSeries, mondayOf, navyBodyFat, weeklyWeights, weightSeries } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, SHEETS, VIEWS, chartTooltip, closeSheets, pageList, pushSheet, render, toast, undoable } from './ui.js';
@@ -17,6 +17,15 @@ export function viewProgreso() {
   const stepVals = stepDays.map((d) => dayOf(d).steps);
   const stepAvgList = stepVals.slice(-7).filter((v) => v != null);
   const stepAvg = stepAvgList.length ? stepAvgList.reduce((a, b) => a + b, 0) / stepAvgList.length : null;
+
+  // Sueño: medias de las últimas 7 y 30 noches apuntadas
+  const sleepAvg = (n) => {
+    const v = [];
+    for (let i = 0; i < n; i++) { const x = dayOf(addDays(t, -i)).sleep; if (x != null) v.push(x); }
+    return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+  };
+  const sl7 = sleepAvg(7);
+  const sl30 = sleepAvg(30);
 
   // Media de calorías de los últimos 7 días con registros
   const kcalDays = [];
@@ -77,6 +86,15 @@ export function viewProgreso() {
   </section>
 
   <section class="card">
+    <div class="card-head"><h2>Sueño</h2><span class="muted">últimos 14 días</span></div>
+    <div class="stats">
+      <div><span class="stat-l">Media 7 días</span><span class="stat-v">${sl7 ? fmt(sl7.avg, 1) : '–'}<small> h</small></span>${sl7 ? `<span class="stat-s">${plural(sl7.n, 'noche apuntada', 'noches apuntadas')}</span>` : ''}</div>
+      <div><span class="stat-l">Media 30 días</span><span class="stat-v">${sl30 ? fmt(sl30.avg, 1) : '–'}<small> h</small></span>${sl30 ? `<span class="stat-s">${plural(sl30.n, 'noche apuntada', 'noches apuntadas')}</span>` : ''}</div>
+    </div>
+    <div class="chart" id="sleep-chart"></div>
+  </section>
+
+  <section class="card">
     <div class="card-head"><h2>Calorías</h2></div>
     <div class="stats">
       <div><span class="stat-l">Media 7 días</span><span class="stat-v">${fmt(kcalAvg)}<small> kcal</small></span><span class="stat-s">${kcalDays.length} ${kcalDays.length === 1 ? 'día' : 'días'} con registro, sin contar hoy</span></div>
@@ -88,6 +106,7 @@ export function viewProgreso() {
 export function drawCharts() {
   drawWeightChart();
   drawStepsChart();
+  drawSleepChart();
   if (S.ui.measureK) {
     const m = MEASURE_BY_K[S.ui.measureK];
     drawSeries($('#measure-chart'), measureSeries(m.k), m.u, 1);
@@ -155,21 +174,45 @@ export function drawWeightChart() {
 }
 
 export function drawStepsChart() {
-  const host = $('#steps-chart');
+  drawDayBars('steps-chart', (d) => dayOf(d).steps, {
+    goal: S.settings.goals.steps,
+    axis: (v) => (v >= 1000 ? fmt(v / 1000, 1) + ' mil' : fmt(v)),
+    tip: (v) => fmt(v) + ' pasos',
+    goalText: (g) => `objetivo ${fmt(g)}`,
+    empty: 'Apunta tus pasos en la pantalla Hoy. Puedes copiarlos de la app Salud.',
+    label: 'Pasos de los últimos 14 días',
+  });
+}
+
+export function drawSleepChart() {
+  drawDayBars('sleep-chart', (d) => dayOf(d).sleep, {
+    goal: 8,
+    axis: (v) => fmt(v) + ' h',
+    tip: (v) => fmt(v, 1) + ' h de sueño',
+    goalText: () => '8 h',
+    empty: 'Apunta las horas que has dormido en la pantalla Hoy.',
+    label: 'Horas de sueño de los últimos 14 días',
+    minTop: 9,
+  });
+}
+
+// Barras de los últimos 14 días con línea de objetivo y detalle al tocar
+export function drawDayBars(id, valueOf, o) {
+  const host = $('#' + id);
   if (!host) return;
   const t = today();
   const days = [];
   for (let i = 13; i >= 0; i--) days.push(addDays(t, -i));
-  const vals = days.map((d) => dayOf(d).steps);
+  const vals = days.map(valueOf);
   if (!vals.some((v) => v != null)) {
-    host.innerHTML = '<p class="chart-empty">Apunta tus pasos en la pantalla Hoy. Puedes copiarlos de la app Salud.</p>';
+    host.innerHTML = `<p class="chart-empty">${o.empty}</p>`;
     return;
   }
-  const goal = S.settings.goals.steps;
+  const goal = o.goal;
   const W = Math.max(280, host.clientWidth);
   const H = 170;
   const m = { l: 38, r: 8, t: 12, b: 24 };
-  const max = Math.max(goal || 0, ...vals.map((v) => v || 0)) * 1.08;
+  const max = Math.max(o.minTop || 0, goal || 0, ...vals.map((v) => v || 0)) * 1.08;
   const step = niceStep(max, 3);
   const top = Math.ceil(max / step) * step;
   const ys = (v) => m.t + (1 - v / top) * (H - m.t - m.b);
@@ -177,7 +220,7 @@ export function drawStepsChart() {
   let g = '';
   for (let v = 0; v <= top + 1e-9; v += step) {
     const y = ys(v).toFixed(1);
-    g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${v >= 1000 ? fmt(v / 1000, 1) + ' mil' : fmt(v)}</text>`;
+    g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${o.axis(v)}</text>`;
   }
   const bars = days.map((d, i) => {
     const v = vals[i];
@@ -190,15 +233,15 @@ export function drawStepsChart() {
     const r = Math.min(4, w / 2, h);
     return `<path class="s-bar${goal && v >= goal ? ' hit' : ''}" data-i="${i}" d="M${x},${H - m.b}V${(y + r).toFixed(1)}Q${x},${y.toFixed(1)} ${x + r},${y.toFixed(1)}H${(x + w - r).toFixed(1)}Q${x + w},${y.toFixed(1)} ${x + w},${(y + r).toFixed(1)}V${H - m.b}Z"/>${lbl}`;
   }).join('');
-  const goalLine = goal ? `<line class="goal" x1="${m.l}" x2="${W - m.r}" y1="${ys(goal).toFixed(1)}" y2="${ys(goal).toFixed(1)}"/><text class="axis goal-l" x="${m.l + 4}" y="${(ys(goal) - 5).toFixed(1)}" text-anchor="start">objetivo ${fmt(goal)}</text>` : '';
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Pasos de los últimos 14 días">${g}${bars}${goalLine}</svg>`;
+  const goalLine = goal ? `<line class="goal" x1="${m.l}" x2="${W - m.r}" y1="${ys(goal).toFixed(1)}" y2="${ys(goal).toFixed(1)}"/><text class="axis goal-l" x="${m.l + 4}" y="${(ys(goal) - 5).toFixed(1)}" text-anchor="start">${o.goalText(goal)}</text>` : '';
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${o.label}">${g}${bars}${goalLine}</svg>`;
   const svg = host.querySelector('svg');
   const tip = chartTooltip(host);
   const move = (ev) => {
     const r = svg.getBoundingClientRect();
     const x = ((ev.clientX - r.left) / r.width) * W;
     const i = Math.max(0, Math.min(days.length - 1, Math.floor((x - m.l) / bw)));
-    tip.innerHTML = `<b>${dateShort(days[i])}</b><span>${vals[i] == null ? 'Sin dato' : fmt(vals[i]) + ' pasos'}</span>`;
+    tip.innerHTML = `<b>${dateShort(days[i])}</b><span>${vals[i] == null ? 'Sin dato' : o.tip(vals[i])}</span>`;
     tip.hidden = false;
     tip.style.left = `${Math.min(Math.max(((m.l + (i + 0.5) * bw) / W) * r.width, 60), r.width - 60)}px`;
   };

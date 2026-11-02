@@ -35,6 +35,9 @@
   --step-3: 2.25rem;
   --step-4: 3.5rem;
 
+  --d-kcal: #D9731A;
+  --d-steps: #2F6FD6;
+  --d-train: #1C9E5B;
   --radius: 14px;
   --tabbar-h: 62px;
   color-scheme: light;
@@ -59,6 +62,9 @@
     --danger: #F07468;
     --danger-soft: #3A1A17;
     --danger-ink: #2A0906;
+    --d-kcal: #F2994A;
+    --d-steps: #6FA3F5;
+    --d-train: #4CC98A;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.45);
     color-scheme: dark;
   }
@@ -80,6 +86,9 @@
   --danger: #F07468;
   --danger-soft: #3A1A17;
   --danger-ink: #2A0906;
+  --d-kcal: #F2994A;
+  --d-steps: #6FA3F5;
+  --d-train: #4CC98A;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.45);
   color-scheme: dark;
 }
@@ -124,7 +133,7 @@ a { color: var(--accent); }
 small { font-size: var(--step--1); }
 
 button { font: inherit; color: inherit; cursor: pointer; }
-input, select { font: inherit; font-size: 16px; color: var(--ink); }
+input, select { font: inherit; font-size: max(16px, 1rem); color: var(--ink); }
 :focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 .loading, .muted { color: var(--muted); }
@@ -226,7 +235,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); }
 .link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: inherit; }
 
 /* ---------- pasos y peso ---------- */
-.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .quick-field {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -666,7 +675,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .menu-item:disabled { color: var(--muted); opacity: 0.5; }
 .menu-item.danger { color: var(--danger); }
 .sub-h { font-family: var(--font-display); font-size: var(--step-0); font-weight: 700; }
-textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
+textarea { width: 100%; font: inherit; font-size: max(16px, 1rem); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .chips.scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
 .chips.scroll .chip { flex: none; }
@@ -763,3 +772,84 @@ select { width: 100%; min-height: 44px; border: 1px solid var(--line); border-ra
   .macro-val b { font-size: var(--step-1); }
   .kcal-big { font-size: 3rem; }
 }
+
+/* ---------- Hoy compacto ---------- */
+.back-today { display: flex; justify-content: center; margin: -4px 0 8px; }
+.meal-empty { margin-top: 18px; display: grid; gap: 8px; }
+.meal-empty .eyebrow { color: var(--muted); }
+.meal-empty .chip { font-weight: 700; color: var(--accent); }
+.fab {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: 24;
+  display: flex; align-items: baseline; gap: 6px;
+  border: 0; border-radius: 999px;
+  padding: 14px 20px;
+  min-height: 52px;
+  background: var(--accent); color: var(--accent-ink);
+  font-family: var(--font-display); font-weight: 800; font-size: var(--step-1);
+  box-shadow: var(--shadow);
+}
+.fab small { font-family: var(--font-body); font-weight: 400; font-size: var(--step--1); opacity: 0.85; }
+body.resting .fab { display: none; }
+.fab-space { height: 72px; }
+.fav-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px; min-height: 36px; font-weight: 700; font-size: var(--step--1); margin: 4px 0 8px; }
+.fav-btn.on { border-color: var(--carb); color: var(--carb); }
+.star { color: var(--carb); }
+
+/* ---------- calendario ---------- */
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.cal-title { font-family: var(--font-display); font-size: var(--step-1); }
+.icon-btn:disabled { opacity: 0.35; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--muted); padding: 2px 0 4px; }
+.cal-cell { aspect-ratio: 1 / 1.05; max-width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 10px; background: var(--surface); color: var(--ink); display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; padding: 4px 0 6px; }
+.cal-cell.pad { background: none; }
+.cal-cell.today { border-color: var(--ink); }
+.cal-cell.sel { background: var(--ink); color: var(--bg); }
+.cal-cell.future { opacity: 0.4; }
+.cal-n { font-weight: 700; font-size: var(--step-0); }
+.cal-dots { display: flex; gap: 3px; min-height: 7px; }
+.cal-dots i, .cal-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.cal-cell.sel .cal-dots i { box-shadow: 0 0 0 1.5px var(--bg); }
+.d-kcal { background: var(--d-kcal); }
+.d-steps { background: var(--d-steps); }
+.d-train { background: var(--d-train); }
+.cal-legend { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; font-size: var(--step--1); }
+.cal-legend li { display: flex; align-items: center; gap: 8px; }
+.cal-legend i { width: 10px; height: 10px; flex: none; }
+.cal-legend b { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* ---------- bienvenida ---------- */
+.ob-dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+.ob-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.ob-dots i.done { background: var(--accent); opacity: 0.45; }
+.ob-dots i.on { background: var(--accent); width: 22px; border-radius: 4px; }
+.ob-lede { font-size: var(--step-0); margin-bottom: 12px; }
+.ob-points { padding-left: 1.2em; display: grid; gap: 10px; }
+.tpl + .tpl, .list .tpl { margin-top: 8px; }
+
+/* ---------- ajustes ---------- */
+.aj-nav { margin: 0 0 4px; }
+
+/* ---------- accesibilidad: tamaño del texto y botones grandes ---------- */
+@supports (font: -apple-system-body) {
+  :root[data-text="system"] { font: -apple-system-body; }
+}
+:root[data-text="large"] { font-size: 112.5%; }
+:root[data-big] .btn, :root[data-big] .chip, :root[data-big] .btn-add, :root[data-big] .fav-btn { min-height: 48px; }
+:root[data-big] .btn.small { min-height: 44px; }
+:root[data-big] .icon-btn { width: 52px; height: 52px; }
+:root[data-big] .icon-btn.small { width: 44px; height: 44px; }
+:root[data-big] .set-done { width: 48px; height: 48px; }
+:root[data-big] .set-type { width: 40px; height: 40px; }
+:root[data-big] .stepper button { min-height: 48px; }
+:root[data-big] .sets input[type="text"] { min-height: 48px; }
+:root[data-big] .row { min-height: 56px; }
+/* Con el botón flotante de Hoy, los avisos salen por encima de él */
+body:has(.fab) #toast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 84px); }
+body.sheet-open:has(.fab) #toast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px); }
+body.resting:has(.fab) #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 170px); }
+.tpl .row-sub { display: block; margin-top: 2px; }
+.tpl .btn { white-space: nowrap; flex: none; }

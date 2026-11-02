@@ -299,6 +299,17 @@ export function fillExList(s) {
     </button></li>`).join('')}</ul>` : '<p class="empty">Ningún ejercicio coincide. Puedes crearlo.</p>';
 }
 
+// Añade las rutinas de una plantilla (sin duplicar las que ya estén)
+export function addTemplate(t) {
+  for (const r of t.routines) {
+    if (Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq)) continue;
+    const id = uid();
+    S.routines[id] = { id, name: r.name, group: t.id, seq: r.seq, items: structuredClone(r.items) };
+  }
+  saveRoutines();
+}
+export const templateAdded = (t) => t.routines.every((r) => Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq));
+
 export function replaceExercise(target, idx, exId) {
   const w = S.workouts[target.id];
   const we = w.exercises[idx];
@@ -826,18 +837,12 @@ Object.assign(ACTIONS, {
         () => { delete S.exercises[id]; saveExercises(); render(); },
         () => { S.exercises[id] = old; saveExercises(); render(); });
   },
-  'tpl-add': async (el, top, act) => {
+  'tpl-add': async (el) => {
       const t = TEMPLATES.find((x) => x.id === el.dataset.id);
       if (!t) return;
-      for (const r of t.routines) {
-        if (Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq)) continue;
-        const id = uid();
-        S.routines[id] = { id, name: r.name, group: t.id, seq: r.seq, items: structuredClone(r.items) };
-      }
-      saveRoutines();
+      addTemplate(t);
       renderSheets();
       toast(`${t.routines.length} rutinas añadidas`);
-      return;
   },
   'routine-new': async (el, top, act) => {
       pushSheet({ type: 'routine', isNew: true, draft: { id: uid(), name: '', items: [] } });

@@ -4,6 +4,7 @@ import { $, APP_VERSION } from './util.js';
 import { flushAll, loadState } from './state.js';
 import { HOOKS, applyTheme, initEvents, render } from './ui.js';
 import { restoreRest } from './training.js';
+import { maybeOnboard } from './onboarding.js';
 // Cada sección registra sus vistas, hojas y acciones al cargarse
 import './food.js';
 import './progress.js';
@@ -55,6 +56,7 @@ async function boot() {
   applyTheme();
   render();
   restoreRest();
+  maybeOnboard();
   store.askPersist();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

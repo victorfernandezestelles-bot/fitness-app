@@ -70,6 +70,8 @@ export function applyTheme() {
   const t = S.settings.theme || 'auto';
   const root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
+  root.dataset.text = S.settings.textSize || 'system';
+  if (S.settings.bigButtons) root.dataset.big = ''; else delete root.dataset.big;
   const dark = t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.setAttribute('content', dark ? '#0E1311' : '#F2F5F3'); m.removeAttribute('media'); });
 }
