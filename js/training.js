@@ -5,6 +5,7 @@ import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './sta
 import { allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, lastPerformance, mondayOf, musclesText, nextInRotation, setText, suggestion, weekVolume, workoutDuration, workoutStats, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
 import { bar } from './food.js';
+import { viewCardio } from './cardio.js';
 
 setInterval(() => {
   document.querySelectorAll('.live-elapsed').forEach((el) => { el.textContent = clockLabel(Date.now() - Date.parse(el.dataset.start)); });
@@ -46,18 +47,25 @@ export function viewEntreno() {
     ${MUSCLES.filter((m) => m.g === g).map((m) => {
       const v = vol[m.k];
       const detail = Object.entries(byMuscle[m.k]).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${esc(n)} ${fmt(c, 1)}`).join(' · ');
-      return `<div class="vol-row${v ? '' : ' zero'}" title="${detail}">
+      return `<button type="button" class="vol-row${v ? '' : ' zero'}" data-act="vol-history" data-m="${m.k}" aria-label="${m.l}: ${fmt(v, 1)} series. Ver las últimas semanas" title="${detail}">
         <span class="vol-name">${m.l}</span>
         <span class="vol-bar" role="presentation"><span class="vol-zone" style="left:${pct(10)};width:${pct(10)}"></span><span class="vol-fill${v >= 10 ? ' in' : ''}" style="width:${pct(v)}"></span></span>
         <span class="vol-val">${fmt(v, 1)}</span>
-      </div>`;
+      </button>`;
     }).join('')}`).join('');
 
   const recent = workoutsSorted();
-  return `
+  const wtab = S.ui.wtab === 'cardio' ? 'cardio' : 'fuerza';
+  const head = `
   <header class="page-head">
     <h1>Entreno</h1>
   </header>
+  <div class="segmented" role="tablist">
+    <button type="button" role="tab" aria-selected="${wtab === 'fuerza'}" data-act="wtab" data-v="fuerza">Fuerza</button>
+    <button type="button" role="tab" aria-selected="${wtab === 'cardio'}" data-act="wtab" data-v="cardio">Cardio y actividades</button>
+  </div>`;
+  if (wtab === 'cardio') return head + viewCardio();
+  return `${head}
 
   ${open ? `<button type="button" class="live-card" data-act="open-workout" data-id="${open.id}">
       <span class="eyebrow">En curso</span>
@@ -81,7 +89,7 @@ export function viewEntreno() {
     </div>
     <p class="muted small-text">${sessions} ${sessions === 1 ? 'entrenamiento' : 'entrenamientos'} · ${sets} series efectivas. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>
     <div class="vol">${rows}</div>
-    <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series semanales, el rango que se suele usar como referencia para ganar músculo.</p>
+    <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series semanales, el rango que se suele usar como referencia para ganar músculo. Toca un músculo para ver sus últimas 12 semanas.</p>
   </section>
 
   <section class="card">

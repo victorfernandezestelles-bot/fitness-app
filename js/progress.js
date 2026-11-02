@@ -2,6 +2,8 @@ import { $, addDays, dateLong, dateShort, fmt, inputVal, niceStep, num, parseISO
 import { S, saveMeasures, saveSettings, saveWeights } from './state.js';
 import { KCAL_PER_KG, MEASURES, MEASURE_BY_K, dataEnergy, dayOf, formulaEnergy, latestMeasure, latestWeight, measureSeries, mondayOf, navyBodyFat, weeklyWeights, weightSeries } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, SHEETS, VIEWS, chartTooltip, closeSheets, pageList, pushSheet, render, toast, undoable } from './ui.js';
+import { reportCard } from './report.js';
+import { fillPhotoCard, photoCard } from './photos.js';
 
 export function viewProgreso() {
   const all = Object.keys(S.weights).sort();
@@ -41,6 +43,8 @@ export function viewProgreso() {
     <h1>Progreso</h1>
   </header>
 
+  ${reportCard()}
+
   <section class="card">
     <div class="card-head">
       <h2>Peso</h2>
@@ -75,6 +79,8 @@ export function viewProgreso() {
   ${viewEnergy()}
 
   ${viewMeasures()}
+
+  ${photoCard()}
 
   <section class="card">
     <div class="card-head"><h2>Pasos</h2><span class="muted">últimos 14 días</span></div>
@@ -470,7 +476,7 @@ Object.assign(ACTIONS, {
 
 /* ---------- registro de vista, cambios y formularios ---------- */
 
-VIEWS.progreso = { html: viewProgreso, after: drawCharts };
+VIEWS.progreso = { html: viewProgreso, after: () => { drawCharts(); fillPhotoCard(); } };
 HOOKS.resize.push(() => { if (S.ui.tab === 'progreso' && !S.sheets.length) drawCharts(); });
 
 CHANGES.rate = (el) => {

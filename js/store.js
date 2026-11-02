@@ -1,24 +1,33 @@
 // Almacenamiento en el propio dispositivo (IndexedDB), clave → valor.
 const DB_NAME = 'fitness-app';
 const STORE = 'kv';
+const PHOTOS = 'photos'; // fotos de progreso, aparte de los datos (no van en la copia .json)
 let dbp = null;
 
 function open() {
   if (!dbp) {
     dbp = new Promise((resolve, reject) => {
-      const r = indexedDB.open(DB_NAME, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-      r.onsuccess = () => resolve(r.result);
+      const r = indexedDB.open(DB_NAME, 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS);
+      };
+      r.onsuccess = () => {
+        // Si otra pestaña abre una versión más nueva, se cierra esta conexión para no bloquearla
+        r.result.onversionchange = () => { r.result.close(); dbp = null; };
+        resolve(r.result);
+      };
       r.onerror = () => reject(r.error);
     });
   }
   return dbp;
 }
 
-function tx(mode, fn) {
+function tx(mode, fn, name = STORE) {
   return open().then((db) => new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const st = t.objectStore(STORE);
+    const t = db.transaction(name, mode);
+    const st = t.objectStore(name);
     const out = fn(st);
     t.oncomplete = () => resolve(out && out.result !== undefined ? out.result : out);
     t.onerror = () => reject(t.error);
@@ -46,6 +55,14 @@ export const clearAll = () => tx('readwrite', (st) => { st.clear(); });
 export async function putMany(entries) {
   return tx('readwrite', (st) => { for (const [k, v] of entries) st.put(v, k); });
 }
+
+/* ---------- fotos ---------- */
+// Claves: «set:<id>» → { id, date, poses: [...], thumbs: {pose: dataURL} }; «img:<id>:<pose>» → dataURL
+export const photoPut = (key, value) => tx('readwrite', (st) => { st.put(value, key); }, PHOTOS);
+export const photoGet = (key) => tx('readonly', (st) => st.get(key), PHOTOS);
+export const photoDel = (keys) => tx('readwrite', (st) => { for (const k of keys) st.delete(k); }, PHOTOS);
+export const photoClear = () => tx('readwrite', (st) => { st.clear(); }, PHOTOS);
+export const photoSets = () => tx('readonly', (st) => st.getAll(IDBKeyRange.bound('set:', 'set:\uffff')), PHOTOS);
 
 // Pide al sistema que no borre los datos aunque falte espacio
 export async function askPersist() {

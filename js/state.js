@@ -36,7 +36,8 @@ export const S = {
   routines: {},
   workouts: {},
   measures: {},
-  ui: { tab: 'hoy', date: today(), lib: 'recetas', libQ: '', range: 90, week: null, more: {} },
+  activities: {},
+  ui: { tab: 'hoy', date: today(), lib: 'recetas', libQ: '', range: 90, week: null, more: {}, wtab: 'fuerza' },
   sheets: [],
 };
 
@@ -44,8 +45,8 @@ export const S = {
 
 // Versión actual del formato de los datos guardados. Cada vez que cambie la forma de guardar algo,
 // se sube este número y se añade su paso en MIGRATIONS.
-export const SCHEMA = 2;
-const COLLECTIONS = ['foods', 'recipes', 'days', 'weights', 'exercises', 'routines', 'workouts', 'measures'];
+export const SCHEMA = 3;
+const COLLECTIONS = ['foods', 'recipes', 'days', 'weights', 'exercises', 'routines', 'workouts', 'measures', 'activities'];
 
 const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -108,6 +109,12 @@ const MIGRATIONS = {
     for (const [id, r] of Object.entries(d.recipes)) d.recipes[id] = { ...obj(r), id: r?.id || id, items: Array.isArray(r?.items) ? r.items : [] };
     return d;
   },
+  // 2 → 3: nueva colección de cardio y actividades
+  2: (d) => {
+    d.activities = obj(d.activities);
+    for (const [id, a] of Object.entries(d.activities)) d.activities[id] = { ...obj(a), id: a?.id || id };
+    return d;
+  },
 };
 
 // Convierte unos datos de cualquier versión anterior a la actual (no modifica el original)
@@ -123,7 +130,7 @@ export function migrate(data, fromVersion) {
 // Datos del almacén (clave → valor) a una «instantánea» con la misma forma que la copia .json
 export function fromStore(all) {
   const d = { settings: all.settings, days: {}, workouts: {} };
-  for (const c of ['foods', 'recipes', 'weights', 'exercises', 'routines', 'measures']) d[c] = all[c] || {};
+  for (const c of ['foods', 'recipes', 'weights', 'exercises', 'routines', 'measures', 'activities']) d[c] = all[c] || {};
   for (const [k, v] of Object.entries(all)) {
     if (k.startsWith('day:')) d.days[k.slice(4)] = v;
     else if (k.startsWith('wk:')) d.workouts[k.slice(3)] = v;
@@ -135,7 +142,7 @@ export function toStoreEntries(d) {
   return [
     ['settings', d.settings],
     ['foods', d.foods], ['recipes', d.recipes], ['weights', d.weights],
-    ['exercises', d.exercises], ['routines', d.routines], ['measures', d.measures],
+    ['exercises', d.exercises], ['routines', d.routines], ['measures', d.measures], ['activities', d.activities],
     ...Object.entries(d.days).map(([k, v]) => ['day:' + k, v]),
     ...Object.entries(d.workouts).map(([k, v]) => ['wk:' + k, v]),
     ['meta', { schema: SCHEMA, migratedAt: new Date().toISOString() }],
@@ -179,6 +186,7 @@ export const saveWeights = () => persist('weights', () => S.weights);
 export const saveExercises = () => persist('exercises', () => S.exercises);
 export const saveRoutines = () => persist('routines', () => S.routines);
 export const saveMeasures = () => persist('measures', () => S.measures);
+export const saveActivities = () => persist('activities', () => S.activities);
 export const saveWorkout = (id) => persist('wk:' + id, () => S.workouts[id] || null);
 export function saveDay(date) {
   persist('day:' + date, () => {
@@ -217,6 +225,7 @@ export async function replaceAll(data) {
 export async function wipeAll() {
   dropPending();
   await store.clearAll();
+  try { await store.photoClear(); } catch (e) { /* sin fotos */ }
   await store.put('meta', { schema: SCHEMA, createdAt: new Date().toISOString() });
   applySnapshot(migrate({}, SCHEMA));
 }

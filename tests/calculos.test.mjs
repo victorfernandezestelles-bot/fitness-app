@@ -6,7 +6,7 @@ import { S, migrate, SCHEMA, mergeSettings } from '../js/state.js';
 import {
   recipeTotals, nutFor, weekVolume, suggestion, dataEnergy, navyBodyFat, weeklyWeights,
   isTrainDay, goalsFor, workoutDuration, nextInRotation, workoutStats, lastPerformance,
-  dayMarks, guessMeal, favItems,
+  dayMarks, guessMeal, favItems, weekReport, muscleHistory, mondayOf,
 } from '../js/derived.js';
 import { kcalFrom, scale, sumNut } from '../js/nutrients.js';
 import { defaultCfg, EXERCISES_BY_ID, e1rm } from '../js/exercises.js';
@@ -219,4 +219,49 @@ test('favoritos: con la cantidad de la última vez y sin los borrados', () => {
   assert.deepEqual(f.map((x) => x.id), ['r', 'yog']);
   assert.equal(f.find((x) => x.id === 'yog').qty, 125);
   assert.equal(f.find((x) => x.id === 'r').qty, null);
+});
+
+test('informe semanal: medias, cambio de peso, cardio y medidas', () => {
+  reset();
+  S.settings.goals = { kcal: 2300, p: null, c: null, f: null, steps: 10000 };
+  const mon = '2026-10-26';
+  S.weights['2026-10-20'] = 105; S.weights['2026-10-22'] = 105.4;
+  S.weights['2026-10-27'] = 104.6; S.weights['2026-10-30'] = 104.4;
+  S.days['2026-10-26'] = { entries: [{ n: { kcal: 2200, p: 170 } }], steps: 12000, sleep: 7 };
+  S.days['2026-10-27'] = { entries: [{ n: { kcal: 2400, p: 150 } }], steps: 8000, sleep: 8 };
+  S.workouts.w = { id: 'w', date: '2026-10-28', exercises: [{ exId: 'x-press-banca', sets: [{ kg: 80, reps: 8, t: 'n', done: true }] }] };
+  S.activities = { a: { id: 'a', date: '2026-11-01', type: 'carrera', min: 30 }, b: { id: 'b', date: '2026-11-02', type: 'bici', min: 60 } };
+  S.measures = { '2026-10-19': { cintura: 105 }, '2026-10-31': { cintura: 103.5, brazo: 40 } };
+  const r = weekReport(mon);
+  near(r.weight.avg, 104.5, 0.001);
+  near(r.weight.change, -0.7, 0.001);
+  assert.equal(r.kcal.n, 2);
+  assert.equal(r.kcal.avg, 2300);
+  assert.equal(r.kcal.protein, 160);
+  assert.equal(r.steps.hit, 1);
+  assert.equal(r.sleep.avg, 7.5);
+  assert.equal(r.strength.sessions, 1);
+  assert.equal(r.cardio.count, 1, 'la del lunes siguiente no cuenta');
+  assert.equal(r.muscles[0].k, 'pecho');
+  near(r.measures.find((m) => m.k === 'cintura').d, -1.5, 0.001);
+  assert.equal(r.measures.find((m) => m.k === 'brazo').d, null);
+});
+
+test('historial de series de un músculo: 12 semanas terminando en la actual', () => {
+  reset();
+  const mon = mondayOf(today());
+  S.workouts.w = { id: 'w', date: addDays(mon, -7), exercises: [{ exId: 'x-press-banca', sets: [{ kg: 80, reps: 8, t: 'n', done: true }, { kg: 80, reps: 8, t: 'n', done: true }] }] };
+  const h = muscleHistory('pecho', 12);
+  assert.equal(h.length, 12);
+  assert.equal(h[11].mon, mon);
+  assert.equal(h[10].v, 2);
+  assert.equal(h[11].v, 0);
+});
+
+test('migración 2 → 3: añade la colección de actividades sin tocar lo demás', () => {
+  const m = migrate({ settings: {}, weights: { '2026-10-01': 100 } }, 2);
+  assert.deepEqual(m.activities, {});
+  assert.equal(m.weights['2026-10-01'], 100);
+  const m2 = migrate({ activities: { x: { date: '2026-10-01', type: 'bici', min: 40 } } }, 2);
+  assert.equal(m2.activities.x.id, 'x');
 });

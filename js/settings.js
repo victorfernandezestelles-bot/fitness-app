@@ -4,6 +4,8 @@ import { MEAL_NAME, S, SCHEMA, flushAll, replaceAll, saveSettings, snapshot, wip
 import { ACTIVITY, dayOf } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, toast } from './ui.js';
 import { exportCsvEntrenos } from './training.js';
+import { exportCsvActividades } from './cardio.js';
+import { exportPhotos, importPhotos } from './photos.js';
 
 /* ---------- vista: Ajustes ---------- */
 
@@ -101,16 +103,23 @@ export function viewAjustes() {
 
   <section class="card" id="aj-datos">
     <div class="card-head"><h2>Tus datos</h2></div>
-    <p class="muted">Se guardan solo en este teléfono: ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
+    <p class="muted">Se guardan solo en este teléfono: ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
       ${last ? `Última copia: ${dateLong(last.slice(0, 10))}.` : 'Aún no has guardado ninguna copia.'}</p>
     <div class="stack">
       <button type="button" class="btn" data-act="export-json">Guardar copia completa (.json)</button>
       <button type="button" class="btn ghost" data-act="export-csv-diario">Exportar comidas para Excel (.csv)</button>
       <button type="button" class="btn ghost" data-act="export-csv-resumen">Exportar resumen diario, peso y pasos (.csv)</button>
-      <button type="button" class="btn ghost" data-act="export-csv-entrenos">Exportar entrenamientos (.csv)</button>
+      <button type="button" class="btn ghost" data-act="export-csv-entrenos">Exportar entrenamientos de fuerza (.csv)</button>
+      <button type="button" class="btn ghost" data-act="export-csv-actividades">Exportar cardio y actividades (.csv)</button>
       <button type="button" class="btn ghost" data-act="import">Restaurar una copia…</button>
     </div>
     <p class="hint">La copia completa sirve para restaurar todo si cambias de móvil o borras la app. Los .csv se abren en Excel.</p>
+    <h3 class="sub-h top-gap">Fotos de progreso</h3>
+    <p class="muted">Las fotos no van en la copia completa, para que esta siga siendo pequeña. Guárdalas aparte.</p>
+    <div class="stack top-gap">
+      <button type="button" class="btn ghost" data-act="export-photos">Guardar copia de las fotos (.json)</button>
+      <button type="button" class="btn ghost" data-act="import-photos">Restaurar fotos…</button>
+    </div>
   </section>
 
   <section class="card">
@@ -171,7 +180,7 @@ export async function importFile(file) {
   pushSheet({
     type: 'confirm',
     title: 'Restaurar copia',
-    text: `La copia es del ${data.exportedAt ? dateLong(data.exportedAt.slice(0, 10)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}. Sustituirá todos los datos que hay ahora en este teléfono.`,
+    text: `La copia es del ${data.exportedAt ? dateLong(data.exportedAt.slice(0, 10)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}. Sustituirá todos los datos que hay ahora en este teléfono.`,
     ok: 'Restaurar',
     danger: true,
     onOk: async () => {
@@ -210,6 +219,9 @@ Object.assign(ACTIONS, {
       applyTheme();
       el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
   },
+  'export-csv-actividades': () => exportCsvActividades(),
+  'export-photos': () => exportPhotos(),
+  'import-photos': () => importPhotos(),
   'text-size': (el) => {
       S.settings.textSize = el.dataset.v;
       saveSettings();
@@ -237,7 +249,7 @@ Object.assign(ACTIONS, {
       $('#import-file').click();
   },
   'wipe': async (el, top, act) => {
-      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, los entrenamientos, las medidas, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar.', ok: 'Borrar todo', danger: true,
+      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, el sueño, los entrenamientos, el cardio, las medidas, las fotos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar.', ok: 'Borrar todo', danger: true,
         onOk: async () => {
           await wipeAll();
           applyTheme();

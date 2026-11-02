@@ -387,3 +387,61 @@ export function weeklyWeights(n = 8) {
   }
   return out; // de la más reciente a la más antigua
 }
+
+/* ---------- informe semanal ---------- */
+const avgOf = (v) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
+function weekWeight(monday) {
+  const v = [];
+  for (let k = 0; k < 7; k++) { const x = S.weights[addDays(monday, k)]; if (x != null) v.push(x); }
+  return { avg: avgOf(v), n: v.length };
+}
+
+// Resumen de lunes a domingo: peso, comida, pasos, sueño, entrenos, series y medidas
+export function weekReport(monday) {
+  const dates = Array.from({ length: 7 }, (_, k) => addDays(monday, k));
+  const end = dates[6];
+  const w = weekWeight(monday);
+  const wPrev = weekWeight(addDays(monday, -7));
+  const logged = dates.filter((d) => dayOf(d).entries.length);
+  const kcals = logged.map(dayKcal);
+  const prot = logged.map((d) => dayOf(d).entries.reduce((a, e) => a + (e.n.p || 0), 0));
+  const goalK = logged.map((d) => goalsFor(d).kcal).filter((x) => x != null);
+  const stepDays = dates.filter((d) => dayOf(d).steps != null);
+  const stepGoal = S.settings.goals.steps;
+  const sleeps = dates.map((d) => dayOf(d).sleep).filter((x) => x != null);
+  const vol = weekVolume(monday);
+  const strength = Object.values(S.workouts).filter((x) => x.date >= monday && x.date <= end && x.exercises.length).length;
+  const acts = Object.values(S.activities || {}).filter((a) => a.date >= monday && a.date <= end);
+  // Medidas: la última de la semana frente a la anterior de cada medida
+  const mDates = Object.keys(S.measures).sort();
+  const inWeek = mDates.filter((d) => d >= monday && d <= end);
+  const measures = [];
+  if (inWeek.length) {
+    const last = inWeek[inWeek.length - 1];
+    for (const m of MEASURES) {
+      const v = S.measures[last][m.k];
+      if (v == null) continue;
+      const prevDate = mDates.filter((d) => d < last && S.measures[d][m.k] != null).pop();
+      measures.push({ k: m.k, l: m.l, u: m.u, v, d: prevDate ? v - S.measures[prevDate][m.k] : null });
+    }
+  }
+  return {
+    monday, end,
+    weight: { avg: w.avg, n: w.n, change: w.avg != null && wPrev.avg != null ? w.avg - wPrev.avg : null },
+    kcal: { avg: avgOf(kcals), n: logged.length, goal: avgOf(goalK), protein: avgOf(prot) },
+    steps: { avg: avgOf(stepDays.map((d) => dayOf(d).steps)), n: stepDays.length, hit: stepGoal ? stepDays.filter((d) => dayOf(d).steps >= stepGoal).length : null },
+    sleep: { avg: avgOf(sleeps), n: sleeps.length },
+    strength: { sessions: strength, sets: vol.sets },
+    cardio: { count: acts.length, min: acts.reduce((a, x) => a + (x.min || 0), 0) },
+    muscles: MUSCLES.map((m) => ({ k: m.k, l: m.l, v: vol.vol[m.k] })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v),
+    measures,
+  };
+}
+
+// Series de un músculo en las últimas n semanas (de la más antigua a la actual)
+export function muscleHistory(m, n = 12) {
+  const out = [];
+  let mon = mondayOf(today());
+  for (let i = 0; i < n; i++) { out.unshift({ mon, v: weekVolume(mon).vol[m] || 0 }); mon = addDays(mon, -7); }
+  return out;
+}
