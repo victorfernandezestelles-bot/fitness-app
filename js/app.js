@@ -5,7 +5,7 @@ import { decodeGray, imageDataToGray, checksumOk } from './barcode.js';
 import { MUSCLES, MUSCLE_NAME, EXERCISES, EXERCISES_BY_ID, e1rm, defaultCfg } from './exercises.js';
 import { TEMPLATES } from './templates.js';
 
-const APP_VERSION = '0.4.1';
+const APP_VERSION = '0.4.2';
 
 const MEALS = [
   ['desayuno', 'Desayuno'],
@@ -1496,6 +1496,26 @@ function exerciseHistory(exId) {
   return out;
 }
 
+/* Duración del entrenamiento */
+const clockLabel = (ms) => {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+  return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(sec).padStart(2, '0')}`;
+};
+const durLabel = (ms) => {
+  const min = Math.round(ms / 60000);
+  return min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`;
+};
+// Solo cuenta si se empezó y terminó el mismo día (los entrenos apuntados a posteriori no tienen duración real)
+function workoutDuration(w) {
+  if (!w.start || !w.end) return null;
+  const ms = Date.parse(w.end) - Date.parse(w.start);
+  return ms > 0 && ms < 6 * 3600e3 ? ms : null;
+}
+setInterval(() => {
+  document.querySelectorAll('.live-elapsed').forEach((el) => { el.textContent = clockLabel(Date.now() - Date.parse(el.dataset.start)); });
+}, 1000);
+
 function newWorkout(fromRoutine) {
   const w = {
     id: uid(),
@@ -1548,7 +1568,7 @@ function viewEntreno() {
   ${open ? `<button type="button" class="live-card" data-act="open-workout" data-id="${open.id}">
       <span class="eyebrow">En curso</span>
       <b>${esc(open.name)}</b>
-      <span class="muted">${open.exercises.length} ejercicios · ${workoutStats(open).sets} series hechas · toca para seguir</span>
+      <span class="muted"><span class="live-elapsed" data-start="${open.start}">${clockLabel(Date.now() - Date.parse(open.start))}</span> · ${open.exercises.length} ejercicios · ${workoutStats(open).sets} series hechas · toca para seguir</span>
     </button>` : `<button type="button" class="btn wide big" data-act="start-workout">Empezar entrenamiento${nextInRotation() ? ` · toca ${esc(nextInRotation().name)}` : ''}</button>`}
 
   <div class="btn-row two">
@@ -1576,7 +1596,7 @@ function viewEntreno() {
       const st = workoutStats(w);
       return `<li><button type="button" class="row" data-act="open-workout" data-id="${w.id}">
         <span class="row-main">${esc(w.name)}${w.end ? '' : ' <em class="tag">en curso</em>'}</span>
-        <span class="row-sub">${dayLabel(w.date)} · ${w.exercises.length} ejercicios · ${fmt(st.tonnage)} kg movidos</span>
+        <span class="row-sub">${dayLabel(w.date)}${workoutDuration(w) != null ? ` · ${durLabel(workoutDuration(w))}` : ''} · ${w.exercises.length} ejercicios · ${fmt(st.tonnage)} kg movidos</span>
         <span class="row-side">${st.sets} <small>series</small></span>
       </button></li>`;
     }).join('')}</ul>` : '<p class="empty">Aún no hay entrenamientos. Empieza uno vacío o crea una rutina con tus ejercicios habituales.</p>'}
@@ -1661,7 +1681,12 @@ SHEETS.workout = {
       </section>`;
     }).join('');
     const st = workoutStats(w);
+    const dur = workoutDuration(w);
     return `
+      <div class="wk-clock${w.end ? ' done' : ''}">
+        <span class="eyebrow">${w.end ? 'Duración' : 'Tiempo entrenando'}</span>
+        <b ${w.end ? '' : `class="live-elapsed" data-start="${w.start}"`}>${w.end ? (dur == null ? '–' : durLabel(dur)) : clockLabel(Date.now() - Date.parse(w.start))}</b>
+      </div>
       <div class="form-grid">
         <label class="field"><span>Nombre</span><input id="wk-name" type="text" value="${esc(w.name)}" data-input="wk-name" autocomplete="off"></label>
         <label class="field"><span>Fecha</span><input id="wk-date" type="date" value="${w.date}" max="${today()}" data-change="wk-date"></label>
@@ -1880,9 +1905,9 @@ SHEETS.routine = {
     return `
       <label class="field"><span>Nombre</span><input id="rt-name" type="text" value="${esc(d.name)}" placeholder="p. ej. Empuje" autocomplete="off" data-input="rt-name"></label>
       <h3 class="list-title">Ejercicios</h3>
-      <ul class="ingredients">${d.items.map((it, i) => `<li>
+      <ul class="ingredients routine-items">${d.items.map((it, i) => `<li>
         <span class="ing-name">${esc(getEx(it.exId)?.name || 'Ejercicio borrado')}</span>
-        <span class="input-unit small"><input type="text" inputmode="numeric" value="${it.sets}" data-input="rt-sets" data-idx="${i}" aria-label="Series"><em>series</em></span>
+        <label class="unit-after"><input type="text" inputmode="numeric" value="${it.sets}" data-input="rt-sets" data-idx="${i}" aria-label="Series de ${esc(getEx(it.exId)?.name || '')}"><span>series</span></label>
         <button type="button" class="icon-btn small" data-act="rt-del-item" data-idx="${i}" aria-label="Quitar">×</button>
       </li>`).join('')}</ul>
       ${d.items.length ? '' : '<p class="empty">Añade los ejercicios en el orden en que los haces.</p>'}
@@ -2691,7 +2716,7 @@ document.addEventListener('click', async (ev) => {
       if (wasOpen) w.end = new Date().toISOString();
       saveWorkout(w.id);
       closeSheets();
-      if (wasOpen) toast(`Entrenamiento guardado: ${workoutStats(w).sets} series`);
+      if (wasOpen) { const d = workoutDuration(w); toast(`Entrenamiento guardado: ${workoutStats(w).sets} series${d != null ? ` en ${durLabel(d)}` : ''}`); }
       break;
     }
     case 'wk-del': {
