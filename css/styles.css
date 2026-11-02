@@ -1,3 +1,9 @@
+/* Fuentes incluidas en la app (funcionan sin conexión y no se piden a terceros) */
+@font-face { font-family: 'Archivo'; src: url('../fonts/archivo-var.woff') format('woff'); font-weight: 500 800; font-stretch: 62% 125%; font-display: swap; }
+@font-face { font-family: 'Atkinson Hyperlegible'; src: url('../fonts/atkinson-400.woff') format('woff'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Atkinson Hyperlegible'; src: url('../fonts/atkinson-700.woff') format('woff'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Atkinson Hyperlegible'; src: url('../fonts/atkinson-400i.woff') format('woff'); font-weight: 400; font-style: italic; font-display: swap; }
+
 /* Una columna de móvil; el resumen del día imita una etiqueta nutricional europea
    (filete grueso arriba, filetes finos entre filas, cifras en una grotesca estrecha). */
 :root {
@@ -16,6 +22,7 @@
   --fat: #4C67E0;
   --danger: #B42318;
   --danger-soft: #FCE8E6;
+  --danger-ink: #FFFFFF;
   --shadow: 0 1px 2px rgb(16 22 20 / 0.06), 0 8px 24px rgb(16 22 20 / 0.08);
 
   --font-display: 'Archivo', 'Arial Narrow', 'Helvetica Neue', system-ui, sans-serif;
@@ -33,8 +40,9 @@
   color-scheme: light;
 }
 
+/* Oscuro: automático (sigue al iPhone) salvo que se elija Claro; o forzado con Oscuro */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0E1311;
     --surface: #161C19;
     --sunk: #1D2521;
@@ -50,9 +58,31 @@
     --fat: #6E86EE;
     --danger: #F07468;
     --danger-soft: #3A1A17;
+  --danger-ink: #2A0906;
+    --danger-ink: #2A0906;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.45);
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1311;
+  --surface: #161C19;
+  --sunk: #1D2521;
+  --ink: #E6EDE9;
+  --muted: #95A29B;
+  --line: #2A332F;
+  --rule: #E6EDE9;
+  --accent: #4CBB88;
+  --accent-ink: #06130D;
+  --accent-soft: #173428;
+  --prot: #E4627A;
+  --carb: #B8841E;
+  --fat: #6E86EE;
+  --danger: #F07468;
+  --danger-soft: #3A1A17;
+  --danger-ink: #2A0906;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -299,7 +329,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); }
 }
 .btn.small { padding: 6px 12px; min-height: 36px; font-size: var(--step--1); }
 .btn.ghost { background: var(--surface); color: var(--accent); border-color: var(--line); }
-.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: var(--danger-ink); }
 .btn.danger.ghost { background: var(--surface); color: var(--danger); border-color: var(--line); }
 .btn.wide, .btn.full { width: 100%; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -537,9 +567,11 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 
 #toast {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px);
-  transform: translateX(-50%);
   z-index: 60;
   background: var(--ink);
   color: var(--bg);
@@ -667,6 +699,33 @@ select { width: 100%; min-height: 44px; border: 1px solid var(--line); border-ra
 
 .tpl { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .tpl > div { min-width: 0; }
+
+/* ---------- aviso de actualización, deshacer y «ver más» ---------- */
+#update {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  z-index: 70;
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 14px;
+  padding: 8px 8px 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 700;
+  font-size: var(--step--1);
+  box-shadow: var(--shadow);
+}
+#update .btn { background: var(--accent-ink); color: var(--accent); border-color: var(--accent-ink); }
+#toast { display: flex; align-items: center; gap: 12px; }
+#toast[hidden] { display: none; }
+.toast-undo { border: 0; background: none; color: inherit; font-weight: 800; padding: 6px 4px; min-height: 32px; text-decoration: underline; text-underline-offset: 3px; }
+.more-btn { margin-top: 8px; }
 
 @keyframes rise { from { transform: translateY(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }

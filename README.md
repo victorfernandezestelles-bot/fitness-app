@@ -26,14 +26,29 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 | Archivo | Para qué |
 |---|---|
 | `index.html` | Página principal |
-| `css/styles.css` | Estilos |
-| `js/app.js` | Pantallas y lógica |
-| `js/nutrients.js` | Nutrientes, valores de referencia y alimentos básicos |
-| `js/exercises.js` | Músculos y biblioteca de ejercicios |
+| `css/styles.css` | Estilos (tema claro, oscuro y automático) |
+| `fonts/` | Tipografías incluidas (Archivo y Atkinson Hyperlegible, licencia OFL) |
+| `js/app.js` | Arranque y aviso de versión nueva |
+| `js/ui.js` | Pestañas, hojas, avisos con «Deshacer» y registro de acciones |
+| `js/state.js` | Datos, guardado en el teléfono y migraciones entre versiones |
+| `js/derived.js` | Cálculos (volumen, progresión, gasto calórico, medidas…) |
+| `js/food.js` | Hoy, alimentos, recetas y escáner |
+| `js/training.js` | Entreno, rutinas, descanso y duración |
+| `js/progress.js` | Peso, medidas, gasto y gráficas |
+| `js/settings.js` | Ajustes, copias e importación |
+| `js/util.js` | Utilidades comunes |
+| `js/nutrients.js`, `js/exercises.js`, `js/templates.js` | Datos de referencia |
 | `js/barcode.js` | Lector de códigos EAN-13 / EAN-8 sin librerías externas |
 | `js/off.js` | Consulta a Open Food Facts |
-| `js/store.js` | Guardado en el teléfono (IndexedDB) |
-| `sw.js` | Uso sin conexión |
+| `js/store.js` | Almacén en el teléfono (IndexedDB) |
+| `sw.js` | Uso sin conexión (red primero, caché si no hay conexión) |
+| `version.json` | Versión publicada, para avisar de actualizaciones |
+| `tests/` | Pruebas automáticas (`npm test`) |
+| `tools/fix-imports.py` | Recalcula los `import` entre módulos |
+
+## Datos y versiones
+
+Los datos guardados llevan un número de versión. Si una actualización cambia su formato, la app guarda antes una copia interna y convierte los datos al formato nuevo. Las copias `.json` antiguas también se convierten al restaurarlas.
 
 ## Notas
 
