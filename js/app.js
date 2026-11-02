@@ -2,9 +2,9 @@ import { MACROS, MICROS, KEYS, kcalFrom, scale, mult, sumNut, BASICS, BASICS_BY_
 import * as store from './store.js';
 import { offProduct, offSearch } from './off.js';
 import { decodeGray, imageDataToGray, checksumOk } from './barcode.js';
-import { MUSCLES, MUSCLE_NAME, EXERCISES, EXERCISES_BY_ID, e1rm } from './exercises.js';
+import { MUSCLES, MUSCLE_NAME, EXERCISES, EXERCISES_BY_ID, e1rm, defaultCfg } from './exercises.js';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 
 const MEALS = [
   ['desayuno', 'Desayuno'],
@@ -47,8 +47,16 @@ function dayLabel(s) {
 
 /* ---------- estado ---------- */
 
+const defaultSettings = () => ({
+  goals: { kcal: null, p: null, c: null, f: null, steps: null },
+  goalsTrain: { kcal: null, p: null, c: null, f: null },
+  profile: { sex: null, birthYear: null, height: null, activity: 1.55 },
+  rate: -0.5,
+  lastBackup: null, rest: 120, restSound: true, restByEx: {}, exCfg: {},
+});
+
 const S = {
-  settings: { goals: { kcal: null, p: null, c: null, f: null, steps: null }, lastBackup: null, rest: 120, restSound: true, restByEx: {} },
+  settings: defaultSettings(),
   foods: {},
   recipes: {},
   days: {},
@@ -56,6 +64,7 @@ const S = {
   exercises: {},
   routines: {},
   workouts: {},
+  measures: {},
   ui: { tab: 'hoy', date: today(), lib: 'recetas', libQ: '', range: 90, week: null },
   sheets: [],
 };
@@ -86,23 +95,36 @@ const saveRecipes = () => persist('recipes', () => S.recipes);
 const saveWeights = () => persist('weights', () => S.weights);
 const saveExercises = () => persist('exercises', () => S.exercises);
 const saveRoutines = () => persist('routines', () => S.routines);
+const saveMeasures = () => persist('measures', () => S.measures);
 const saveWorkout = (id) => persist('wk:' + id, () => S.workouts[id] || null);
 function saveDay(date) {
   persist('day:' + date, () => {
     const d = S.days[date];
-    if (!d || (!d.entries.length && d.steps == null)) { delete S.days[date]; return null; }
+    if (!d || (!d.entries.length && d.steps == null && !d.type)) { delete S.days[date]; return null; }
     return d;
   });
 }
 
 async function loadState() {
   const all = await store.loadAll();
-  if (all.settings) S.settings = { ...S.settings, ...all.settings, goals: { ...S.settings.goals, ...(all.settings.goals || {}) }, restByEx: { ...(all.settings.restByEx || {}) } };
+  S.settings = defaultSettings();
+  if (all.settings) {
+    const a = all.settings;
+    S.settings = {
+      ...S.settings, ...a,
+      goals: { ...S.settings.goals, ...(a.goals || {}) },
+      goalsTrain: { ...S.settings.goalsTrain, ...(a.goalsTrain || {}) },
+      profile: { ...S.settings.profile, ...(a.profile || {}) },
+      restByEx: { ...(a.restByEx || {}) },
+      exCfg: { ...(a.exCfg || {}) },
+    };
+  }
   S.foods = all.foods || {};
   S.recipes = all.recipes || {};
   S.weights = all.weights || {};
   S.exercises = all.exercises || {};
   S.routines = all.routines || {};
+  S.measures = all.measures || {};
   S.days = {};
   S.workouts = {};
   for (const [k, v] of Object.entries(all)) {
@@ -120,6 +142,19 @@ function allFoods() {
   return [...own, ...BASICS.filter((b) => !ownIds.has(b.id))];
 }
 const dayOf = (date) => S.days[date] || { entries: [], steps: null };
+
+function isTrainDay(date) {
+  const d = S.days[date];
+  if (d?.type) return d.type === 'train';
+  return Object.values(S.workouts).some((w) => w.date === date);
+}
+const hasTrainGoals = () => Object.values(S.settings.goalsTrain || {}).some((v) => v != null);
+function goalsFor(date) {
+  const g = S.settings.goals;
+  if (!hasTrainGoals() || !isTrainDay(date)) return g;
+  const t = S.settings.goalsTrain;
+  return { kcal: t.kcal ?? g.kcal, p: t.p ?? g.p, c: t.c ?? g.c, f: t.f ?? g.f, steps: g.steps };
+}
 function ensureDay(date) {
   if (!S.days[date]) S.days[date] = { entries: [], steps: null };
   return S.days[date];
@@ -157,7 +192,7 @@ function itemName(item) {
   return S.recipes[item.id]?.name || 'Receta borrada';
 }
 
-const qtyLabel = (qty, unit) => (unit === 'rac' ? `${fmt(qty, 2)} ${qty === 1 ? 'ración' : 'raciones'}` : `${fmt(qty, 0)} g`);
+const qtyLabel = (qty, unit) => (unit === 'ud' ? 'a mano' : unit === 'rac' ? `${fmt(qty, 2)} ${qty === 1 ? 'ración' : 'raciones'}` : `${fmt(qty, 0)} g`);
 
 function recentItems(limit = 12) {
   const out = [];
@@ -166,8 +201,14 @@ function recentItems(limit = 12) {
   for (const d of dates) {
     const entries = [...S.days[d].entries].reverse();
     for (const e of entries) {
-      const key = e.type + ':' + e.ref;
+      const key = e.type === 'quick' ? 'quick:' + norm(e.name) : e.type + ':' + e.ref;
       if (seen.has(key)) continue;
+      if (e.type === 'quick') {
+        seen.add(key);
+        out.push({ type: 'quick', name: e.name, n: e.n });
+        if (out.length >= limit) return out;
+        continue;
+      }
       if (e.type === 'food' ? !getFood(e.ref) : !S.recipes[e.ref]) continue;
       seen.add(key);
       out.push({ type: e.type, id: e.ref, qty: e.qty, unit: e.unit });
@@ -218,8 +259,9 @@ function viewHoy() {
   const date = S.ui.date;
   const day = dayOf(date);
   const { tot, have, count } = sumNut(day.entries.map((e) => e.n));
-  const g = S.settings.goals;
+  const g = goalsFor(date);
   const kcal = tot.kcal || 0;
+  const train = isTrainDay(date);
   const hasGoals = g.kcal != null;
   const weight = S.weights[date];
   const backupDue = needsBackup();
@@ -271,6 +313,11 @@ function viewHoy() {
 
   ${backupDue ? `<div class="notice"><p>Hace más de una semana que no guardas una copia de tus datos.</p><button type="button" class="btn small" data-act="export-json">Guardar copia</button></div>` : ''}
 
+  ${hasTrainGoals() ? `<div class="day-type">
+      <span><b>${train ? 'Día de entreno' : 'Día de descanso'}</b> · objetivos de ${train ? 'entreno' : 'descanso'}</span>
+      <button type="button" class="btn ghost small" data-act="day-type">Cambiar a ${train ? 'descanso' : 'entreno'}</button>
+    </div>` : ''}
+
   <section class="label" aria-label="Resumen del día">
     <div class="label-top">
       <span class="eyebrow">Valor energético</span>
@@ -303,6 +350,8 @@ function viewHoy() {
   </section>
 
   ${meals}
+
+  <button type="button" class="btn ghost wide top-gap" data-act="copy-open" data-mode="day">Copiar las comidas de otro día…</button>
 
   <details class="detail">
     <summary>Información nutricional completa</summary>
@@ -432,7 +481,7 @@ function viewProgreso() {
 
   // Media de calorías de los últimos 7 días con registros
   const kcalDays = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 1; i <= 7; i++) {
     const d = dayOf(addDays(t, -i));
     if (d.entries.length) kcalDays.push(d.entries.reduce((a, e) => a + (e.n.kcal || 0), 0));
   }
@@ -466,10 +515,15 @@ function viewProgreso() {
       <label>Peso (kg) <input type="text" id="wf-kg" inputmode="decimal" placeholder="75,4"></label>
       <button class="btn" type="submit">Guardar</button>
     </form>
+    ${viewWeekly()}
     ${all.length ? `<details class="detail compact"><summary>Todos los registros (${all.length})</summary>
       <ul class="list tight">${[...all].reverse().map((d) => `<li class="row static"><span class="row-main">${dateLong(d)}</span><span class="row-side">${fmt(S.weights[d], 2)} kg</span><button type="button" class="icon-btn small" data-act="del-weight" data-date="${d}" aria-label="Borrar el peso del ${dateLong(d)}">×</button></li>`).join('')}</ul>
     </details>` : ''}
   </section>
+
+  ${viewEnergy()}
+
+  ${viewMeasures()}
 
   <section class="card">
     <div class="card-head"><h2>Pasos</h2><span class="muted">últimos 14 días</span></div>
@@ -483,7 +537,7 @@ function viewProgreso() {
   <section class="card">
     <div class="card-head"><h2>Calorías</h2></div>
     <div class="stats">
-      <div><span class="stat-l">Media 7 días</span><span class="stat-v">${fmt(kcalAvg)}<small> kcal</small></span><span class="stat-s">${kcalDays.length} ${kcalDays.length === 1 ? 'día' : 'días'} con registro</span></div>
+      <div><span class="stat-l">Media 7 días</span><span class="stat-v">${fmt(kcalAvg)}<small> kcal</small></span><span class="stat-s">${kcalDays.length} ${kcalDays.length === 1 ? 'día' : 'días'} con registro, sin contar hoy</span></div>
       <div><span class="stat-l">Objetivo</span><span class="stat-v">${fmt(S.settings.goals.kcal)}<small> kcal</small></span></div>
     </div>
   </section>`;
@@ -500,6 +554,10 @@ function niceStep(range, target) {
 function drawCharts() {
   drawWeightChart();
   drawStepsChart();
+  if (S.ui.measureK) {
+    const m = MEASURE_BY_K[S.ui.measureK];
+    drawSeries($('#measure-chart'), measureSeries(m.k), m.u, 1);
+  }
 }
 
 function chartTooltip(host) {
@@ -625,6 +683,8 @@ function drawStepsChart() {
 
 function viewAjustes() {
   const g = S.settings.goals;
+  const gt = S.settings.goalsTrain;
+  const pr = S.settings.profile;
   const field = (id, label, value, unit) => `
     <label class="field"><span>${label}</span>
       <span class="input-unit"><input id="${id}" type="text" inputmode="decimal" value="${value == null ? '' : inputVal(value, 0)}" placeholder="–"><em>${unit}</em></span>
@@ -645,8 +705,37 @@ function viewAjustes() {
       ${field('g-c', 'Hidratos', g.c, 'g')}
       ${field('g-f', 'Grasas', g.f, 'g')}
       ${field('g-steps', 'Pasos', g.steps, 'pasos')}
+      <div class="full sub-head">
+        <h3>Días de entreno <small>(opcional)</small></h3>
+        <p class="hint">Si los rellenas, se usan los días en que registres un entrenamiento, y los de arriba el resto. Lo que dejes vacío toma el valor de arriba.</p>
+      </div>
+      ${field('gt-kcal', 'Calorías', gt.kcal, 'kcal')}
+      ${field('gt-p', 'Proteínas', gt.p, 'g')}
+      ${field('gt-c', 'Hidratos', gt.c, 'g')}
+      ${field('gt-f', 'Grasas', gt.f, 'g')}
       <p class="hint full" id="goal-check"></p>
       <button class="btn full" type="submit">Guardar objetivos</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Tu cuerpo</h2></div>
+    <p class="muted">Sirve para estimar tu gasto calórico mientras no haya datos suficientes y para el % de grasa a partir de las medidas.</p>
+    <form data-form="profile">
+      <div class="field top-gap"><span>Sexo</span>
+        <div class="chips">
+          <button type="button" class="chip${pr.sex === 'h' ? ' on' : ''}" data-act="sex" data-v="h" aria-pressed="${pr.sex === 'h'}">Hombre</button>
+          <button type="button" class="chip${pr.sex === 'm' ? ' on' : ''}" data-act="sex" data-v="m" aria-pressed="${pr.sex === 'm'}">Mujer</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label class="field"><span>Año de nacimiento</span><input id="pf-year" type="text" inputmode="numeric" value="${pr.birthYear ?? ''}" placeholder="2003"></label>
+        <label class="field"><span>Altura</span><span class="input-unit"><input id="pf-height" type="text" inputmode="decimal" value="${inputVal(pr.height, 1)}" placeholder="180"><em>cm</em></span></label>
+      </div>
+      <label class="field"><span>Actividad diaria</span>
+        <select id="pf-activity">${ACTIVITY.map(([v, l]) => `<option value="${v}" ${Number(pr.activity) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      </label>
+      <button class="btn wide" type="submit">Guardar</button>
     </form>
   </section>
 
@@ -737,8 +826,10 @@ SHEETS.picker = {
       <input id="pick-q" type="search" placeholder="Busca un alimento${s.mode === 'diary' ? ' o receta' : ''}" value="${esc(s.q || '')}" autocomplete="off" data-input="pickq">
       <div class="btn-row">
         <button type="button" class="btn" data-act="scan">Escanear código</button>
-        <button type="button" class="btn ghost" data-act="pick-new-food">Crear a mano</button>
+        ${s.mode === 'diary' ? '<button type="button" class="btn ghost" data-act="quick-new">Macros a mano</button>' : ''}
+        <button type="button" class="btn ghost" data-act="pick-new-food">Crear alimento</button>
       </div>
+      ${s.mode === 'diary' ? repeatBlock(s) : ''}
     </div>
     <div id="pick-list"></div>
     <div id="off-list"></div>`,
@@ -752,8 +843,16 @@ function fillPickList(s) {
   let html = '';
   if (!q && s.mode === 'diary') {
     const rec = recentItems();
+    s.recent = rec;
     if (rec.length) {
-      html += `<h3 class="list-title">Recientes</h3><ul class="list">${rec.map((r) => {
+      html += `<h3 class="list-title">Recientes</h3><ul class="list">${rec.map((r, idx) => {
+        if (r.type === 'quick') {
+          return `<li><button type="button" class="row" data-act="pick-quick" data-idx="${idx}">
+          <span class="row-main">${esc(r.name)}</span>
+          <span class="row-sub">A mano · P ${fmt(r.n.p, 0)} · H ${fmt(r.n.c, 0)} · G ${fmt(r.n.f, 0)}</span>
+          <span class="row-side">${fmt(r.n.kcal)} <small>kcal</small></span>
+        </button></li>`;
+        }
         const n = nutFor(r, r.qty, r.unit);
         return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" data-qty="${r.qty}" data-unit="${r.unit}">
           <span class="row-main">${esc(itemName(r))}</span>
@@ -827,6 +926,104 @@ function choose(item, then, opts = {}) {
   if (!then) { popSheet(); return; }
   const q = { type: 'qty', item, meal: then.meal, date: then.date, qty: opts.qty, unit: opts.unit };
   if (opts.replace) replaceTop(q); else pushSheet(q);
+}
+
+
+/* Repetir y copiar comidas */
+function repeatBlock(s) {
+  const prev = addDays(s.date, -1);
+  const list = dayOf(prev).entries.filter((e) => e.meal === s.meal);
+  const kcal = list.reduce((a, e) => a + (e.n.kcal || 0), 0);
+  const meal = MEAL_NAME[s.meal].toLowerCase();
+  return `<div class="repeat">
+    ${list.length ? `<button type="button" class="repeat-btn" data-act="copy-yesterday">
+        <b>Repetir ${meal} de ayer</b>
+        <span>${list.map((e) => esc(e.name)).join(', ')} · ${fmt(kcal)} kcal</span>
+      </button>` : ''}
+    <button type="button" class="link" data-act="copy-open" data-mode="meal">Copiar ${meal} de otro día…</button>
+  </div>`;
+}
+
+function copyEntries(from, to, meal) {
+  const src = dayOf(from).entries.filter((e) => !meal || e.meal === meal);
+  if (!src.length) return 0;
+  const day = ensureDay(to);
+  for (const e of src) day.entries.push({ ...structuredClone(e), id: uid() });
+  saveDay(to);
+  return src.length;
+}
+
+SHEETS.copy = {
+  title: (s) => (s.mode === 'day' ? 'Copiar comidas de otro día' : `Copiar ${MEAL_NAME[s.meal].toLowerCase()}`),
+  render: (s) => {
+    if (!s.from) s.from = addDays(s.date, -1);
+    const src = dayOf(s.from).entries.filter((e) => s.mode === 'day' || e.meal === s.meal);
+    const kcal = src.reduce((a, e) => a + (e.n.kcal || 0), 0);
+    const groups = MEALS.map(([k, l]) => {
+      const list = src.filter((e) => e.meal === k);
+      if (!list.length) return '';
+      return `<h3 class="list-title">${l}</h3><ul class="list">${list.map((e) => `<li class="row static">
+        <span class="row-main">${esc(e.name)}</span><span class="row-side">${fmt(e.n.kcal)} <small>kcal</small></span><span></span>
+        <span class="row-sub">${qtyLabel(e.qty, e.unit)}</span></li>`).join('')}</ul>`;
+    }).join('');
+    return `
+      <label class="field"><span>Copiar desde el día</span><input id="copy-from" type="date" value="${s.from}" max="${today()}" data-change="copy-from"></label>
+      ${src.length ? groups : `<p class="empty">El ${dateLong(s.from)} no tiene nada apuntado${s.mode === 'day' ? '' : ` en ${MEAL_NAME[s.meal].toLowerCase()}`}.</p>`}
+      <div class="sheet-actions">
+        <button type="button" class="btn primary" data-act="copy-run" ${src.length ? '' : 'disabled'}>Copiar ${src.length} ${src.length === 1 ? 'alimento' : 'alimentos'} (${fmt(kcal)} kcal) a ${dayLabel(s.date).toLowerCase()}</button>
+      </div>`;
+  },
+};
+
+/* Macros a mano */
+SHEETS.quick = {
+  title: (s) => (s.entryId ? 'Editar macros a mano' : 'Macros a mano'),
+  render: (s) => {
+    const d = s.draft;
+    const f = (id, label, v, unit) => `<label class="nut-field"><span>${label}</span><span class="input-unit"><input id="${id}" type="text" inputmode="decimal" value="${inputVal(v, 1)}" placeholder="–"><em>${unit}</em></span></label>`;
+    const meal = s.meal || 'comida';
+    return `
+      <p class="sheet-sub">Para platos que no puedes pesar, como la comida del comedor. Si dejas vacías las calorías, se calculan con los macros.</p>
+      <label class="field"><span>Nombre</span><input id="q-name" type="text" value="${esc(d.name || '')}" placeholder="p. ej. Comedor: lentejas y pollo" autocomplete="off"></label>
+      <div class="nut-box">
+        ${f('q-kcal', 'Calorías', d.kcal, 'kcal')}
+        ${f('q-p', 'Proteínas', d.p, 'g')}
+        ${f('q-c', 'Hidratos', d.c, 'g')}
+        ${f('q-f', 'Grasas', d.f, 'g')}
+        ${f('q-fi', 'Fibra (opcional)', d.fi, 'g')}
+      </div>
+      <div class="field top-gap"><span>Comida</span>
+        <div class="chips">${MEALS.map(([k, l]) => `<button type="button" class="chip${k === meal ? ' on' : ''}" data-act="qty-meal" data-meal="${k}" aria-pressed="${k === meal}">${l}</button>`).join('')}</div>
+      </div>
+      <div class="sheet-actions">
+        ${s.entryId ? '<button type="button" class="btn danger ghost" data-act="entry-del">Quitar</button>' : ''}
+        <button type="button" class="btn primary" data-act="quick-save">${s.entryId ? 'Guardar' : 'Añadir'}</button>
+      </div>`;
+  },
+};
+
+function saveQuick(s) {
+  const n = {};
+  for (const k of KEYS) n[k] = null;
+  n.p = num($('#q-p').value);
+  n.c = num($('#q-c').value);
+  n.f = num($('#q-f').value);
+  n.fi = num($('#q-fi').value);
+  n.kcal = num($('#q-kcal').value);
+  if (n.kcal == null && (n.p != null || n.c != null || n.f != null)) n.kcal = kcalFrom(n);
+  if (n.kcal == null) { toast('Pon las calorías o al menos un macro.'); return; }
+  const name = $('#q-name').value.trim() || 'Comida a mano';
+  const day = ensureDay(s.date);
+  const entry = { id: s.entryId || uid(), meal: s.meal || 'comida', type: 'quick', ref: null, name, qty: 1, unit: 'ud', n };
+  if (s.entryId) {
+    const i = day.entries.findIndex((e) => e.id === s.entryId);
+    if (i >= 0) day.entries[i] = entry;
+  } else day.entries.push(entry);
+  saveDay(s.date);
+  S.ui.tab = 'hoy';
+  S.ui.date = s.date;
+  closeSheets();
+  toast(s.entryId ? 'Guardado' : `Añadido a ${MEAL_NAME[entry.meal]}`);
 }
 
 /* Cantidad */
@@ -1410,11 +1607,14 @@ SHEETS.workout = {
     const exs = w.exercises.map((we, i) => {
       const ex = getEx(we.exId);
       const last = lastPerformance(we.exId, w);
+      const cfg = exCfg(we.exId);
+      const sug = suggestion(last, cfg);
       let n = 0;
       const rows = we.sets.map((st, j) => {
         const warm = st.t === 'w';
         if (!warm) n++;
-        const ph = !warm && last ? last.sets[n - 1] : null;
+        let ph = !warm && last ? last.sets[n - 1] || last.sets[last.sets.length - 1] : null;
+        if (ph && sug?.type === 'up') ph = { kg: sug.kg, reps: cfg.min };
         return `<tr class="${st.done ? 'done' : ''}${warm ? ' warm' : ''}">
           <td><button type="button" class="set-type" data-act="set-type" data-i="${i}" data-j="${j}" aria-label="Serie ${warm ? 'de calentamiento' : n}. Toca para cambiar el tipo">${warm ? 'C' : n}</button></td>
           <td><input type="text" inputmode="decimal" data-input="set-kg" data-i="${i}" data-j="${j}" value="${inputVal(st.kg, 2)}" placeholder="${ph ? inputVal(ph.kg, 2) : 'kg'}" aria-label="Kilos"></td>
@@ -1431,6 +1631,8 @@ SHEETS.workout = {
         </div>
         <p class="wk-muscles">${esc(musclesText(ex))}</p>
         ${last ? `<p class="wk-last">Última vez (${dateShort(last.date)}): ${last.sets.map(setText).join(' · ')}</p>` : ''}
+        ${sug ? `<p class="wk-sug ${sug.type}">${sug.text}</p>` : ''}
+        <button type="button" class="wk-cfg" data-act="ex-cfg" data-id="${esc(we.exId)}">Rango ${cfg.min}–${cfg.max} reps · sube de ${fmt(cfg.inc, 2)} en ${fmt(cfg.inc, 2)} kg</button>
         <table class="sets">
           <thead><tr><th scope="col">Serie</th><th scope="col">Kg</th><th scope="col">Reps</th><th scope="col"><span class="sr">Hecha</span></th><th></th></tr></thead>
           <tbody>${rows}</tbody>
@@ -1518,6 +1720,49 @@ SHEETS['ex-edit'] = {
   },
 };
 
+
+/* Progresión: rango de repeticiones e incremento por ejercicio */
+function exCfg(exId) {
+  return { ...defaultCfg(getEx(exId)), ...(S.settings.exCfg?.[exId] || {}) };
+}
+
+// Doble progresión: se sube el peso cuando todas las series llegan al tope del rango
+function suggestion(last, cfg) {
+  if (!last || !last.sets.length) return null;
+  const work = last.sets;
+  const topKg = Math.max(...work.map((x) => x.kg || 0));
+  const allTop = work.every((x) => (x.reps || 0) >= cfg.max);
+  if (allTop && topKg > 0) {
+    return { type: 'up', kg: topKg + cfg.inc, text: `Sube a ${fmt(topKg + cfg.inc, 2)} kg: la última vez hiciste ${cfg.max} o más repeticiones en todas las series. Empieza buscando ${cfg.min}.` };
+  }
+  if (work.every((x) => (x.reps || 0) < cfg.min)) {
+    return { type: 'down', text: `La última vez no llegaste a ${cfg.min} repeticiones. Si hoy tampoco llegas, baja un poco el peso.` };
+  }
+  return { type: 'reps', text: topKg > 0
+    ? `Mantén ${fmt(topKg, 2)} kg y busca sumar repeticiones. Subirás cuando hagas ${cfg.max} en todas las series.`
+    : `Busca sumar repeticiones hasta ${cfg.max} en todas las series.` };
+}
+
+SHEETS['ex-cfg'] = {
+  title: (s) => getEx(s.id)?.name || 'Ejercicio',
+  render: (s) => {
+    const c = exCfg(s.id);
+    const custom = !!S.settings.exCfg?.[s.id];
+    return `
+      <p class="sheet-sub">Con este rango la app te dirá cuándo subir de peso: cuando hagas el máximo de repeticiones en todas las series, te propondrá sumar el incremento.</p>
+      <div class="form-grid">
+        <label class="field"><span>Mínimo de reps</span><input id="cfg-min" type="text" inputmode="numeric" value="${c.min}"></label>
+        <label class="field"><span>Máximo de reps</span><input id="cfg-max" type="text" inputmode="numeric" value="${c.max}"></label>
+      </div>
+      <label class="field"><span>Subir de peso de</span><span class="input-unit"><input id="cfg-inc" type="text" inputmode="decimal" value="${inputVal(c.inc, 2)}"><em>kg</em></span></label>
+      <p class="hint">Por defecto, 6–12 repeticiones en ejercicios compuestos y 10–20 en aislamientos. Con mancuernas se sube de 2 en 2 kg y con el resto de 2,5 en 2,5.</p>
+      <div class="sheet-actions">
+        ${custom ? '<button type="button" class="btn ghost" data-act="cfg-reset">Por defecto</button>' : ''}
+        <button type="button" class="btn primary" data-act="cfg-save">Guardar</button>
+      </div>`;
+  },
+};
+
 /* Historial de un ejercicio */
 SHEETS['ex-history'] = {
   title: (s) => getEx(s.id)?.name || 'Ejercicio',
@@ -1534,7 +1779,10 @@ SHEETS['ex-history'] = {
     }
     return `
       <p class="sheet-sub">${esc(musclesText(ex))}</p>
-      <button type="button" class="btn ghost small" data-act="ex-edit" data-id="${esc(s.id)}">Editar músculos</button>
+      <div class="btn-row">
+        <button type="button" class="btn ghost small" data-act="ex-edit" data-id="${esc(s.id)}">Editar músculos</button>
+        <button type="button" class="btn ghost small" data-act="ex-cfg" data-id="${esc(s.id)}">Rango ${exCfg(s.id).min}–${exCfg(s.id).max} · +${fmt(exCfg(s.id).inc, 2)} kg</button>
+      </div>
       <div class="stats top-gap">
         <div><span class="stat-l">1RM estimado</span><span class="stat-v">${fmt(best, 1)}<small> kg</small></span></div>
         <div><span class="stat-l">Mejor serie</span><span class="stat-v">${bestSet ? setText(bestSet) : '–'}</span></div>
@@ -1793,6 +2041,286 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && rest) { tickRest(); if (!rest?.finished) keepAwake(true); }
 });
 
+
+/* ---------- medidas, medias semanales y gasto calórico ---------- */
+
+const MEASURES = [
+  { k: 'cintura', l: 'Cintura', u: 'cm', hint: 'A la altura del ombligo, de pie, relajado y sin apretar la cinta.' },
+  { k: 'hombros', l: 'Hombros', u: 'cm', hint: 'Contorno por la parte más ancha de los hombros, con los brazos relajados.' },
+  { k: 'pecho', l: 'Pecho', u: 'cm', hint: 'A la altura de los pezones, después de soltar el aire.' },
+  { k: 'brazo', l: 'Brazo', u: 'cm', hint: 'Bíceps contraído, por la parte más ancha. Mide siempre el mismo brazo.' },
+  { k: 'cuello', l: 'Cuello', u: 'cm', hint: 'Justo por debajo de la nuez. Se usa para estimar el % de grasa.' },
+  { k: 'cadera', l: 'Cadera', u: 'cm', hint: 'Por la parte más ancha de los glúteos.' },
+  { k: 'muslo', l: 'Muslo', u: 'cm', hint: 'Por la parte más ancha, de pie y relajado.' },
+  { k: 'gemelo', l: 'Gemelo', u: 'cm', hint: 'Por la parte más ancha.' },
+  { k: 'grasa', l: '% de grasa medido', u: '%', hint: 'Solo si te lo mide una báscula de bioimpedancia o un profesional.' },
+];
+const MEASURE_BY_K = Object.fromEntries(MEASURES.map((m) => [m.k, m]));
+
+const ACTIVITY = [
+  [1.2, 'Sedentario: oficina y menos de 5.000 pasos'],
+  [1.375, 'Ligero: 5.000–8.000 pasos o 1–3 entrenos por semana'],
+  [1.55, 'Moderado: 8.000–12.000 pasos o 3–5 entrenos por semana'],
+  [1.725, 'Alto: más de 12.000 pasos y entreno casi a diario'],
+  [1.9, 'Muy alto: trabajo físico y entreno a diario'],
+];
+
+const KCAL_PER_KG = 7700; // energía aproximada de 1 kg de peso corporal
+
+function measureSeries(k) {
+  return Object.keys(S.measures).sort().filter((d) => S.measures[d][k] != null).map((d) => ({ d, v: S.measures[d][k] }));
+}
+function latestMeasure(k) {
+  const s = measureSeries(k);
+  return s.length ? s[s.length - 1] : null;
+}
+
+// % de grasa estimado con la fórmula de la Marina de EE. UU. (medidas en cm)
+function navyBodyFat() {
+  const p = S.settings.profile;
+  const h = p.height;
+  const waist = latestMeasure('cintura')?.v;
+  const neck = latestMeasure('cuello')?.v;
+  if (!h || !waist || !neck || !p.sex) return null;
+  if (p.sex === 'h') {
+    if (waist <= neck) return null;
+    return 495 / (1.0324 - 0.19077 * Math.log10(waist - neck) + 0.15456 * Math.log10(h)) - 450;
+  }
+  const hip = latestMeasure('cadera')?.v;
+  if (!hip) return null;
+  return 495 / (1.29579 - 0.35004 * Math.log10(waist + hip - neck) + 0.221 * Math.log10(h)) - 450;
+}
+
+function latestWeight() {
+  const ds = Object.keys(S.weights).sort();
+  return ds.length ? S.weights[ds[ds.length - 1]] : null;
+}
+
+// Metabolismo basal (Mifflin-St Jeor) y gasto con el factor de actividad
+function formulaEnergy() {
+  const p = S.settings.profile;
+  const w = latestWeight();
+  if (!p.sex || !p.birthYear || !p.height || !w) return null;
+  const age = new Date().getFullYear() - p.birthYear;
+  const bmr = 10 * w + 6.25 * p.height - 5 * age + (p.sex === 'h' ? 5 : -161);
+  return { bmr, tdee: bmr * (p.activity || 1.55) };
+}
+
+// Gasto real: lo que comes de media menos lo que explica el cambio de peso (últimas 4 semanas)
+function dataEnergy() {
+  const end = addDays(today(), -1);
+  const start = addDays(end, -27);
+  const intake = [];
+  for (let i = 0; i < 28; i++) {
+    const day = S.days[addDays(start, i)];
+    if (!day || !day.entries.length) continue;
+    const k = day.entries.reduce((a, e) => a + (e.n.kcal || 0), 0);
+    if (k >= 800) intake.push(k); // días con menos se consideran a medio apuntar
+  }
+  const t0 = parseISO(start).getTime();
+  const pts = Object.keys(S.weights).filter((d) => d >= start && d <= end).sort()
+    .map((d) => ({ x: (parseISO(d).getTime() - t0) / 864e5, y: S.weights[d] }));
+  const span = pts.length ? pts[pts.length - 1].x - pts[0].x : 0;
+  const base = { intakeDays: intake.length, weightDays: pts.length, span };
+  if (intake.length < 14 || pts.length < 8 || span < 14) return { ready: false, ...base };
+  const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+  const my = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+  const slope = pts.reduce((a, p) => a + (p.x - mx) * (p.y - my), 0) / pts.reduce((a, p) => a + (p.x - mx) ** 2, 0);
+  const kcalAvg = intake.reduce((a, b) => a + b, 0) / intake.length;
+  return { ready: true, ...base, kcalAvg, weekly: slope * 7, tdee: kcalAvg - slope * KCAL_PER_KG };
+}
+
+function weeklyWeights(n = 8) {
+  const out = [];
+  let mon = mondayOf(today());
+  for (let i = 0; i < n; i++) {
+    const vals = [];
+    for (let k = 0; k < 7; k++) { const v = S.weights[addDays(mon, k)]; if (v != null) vals.push(v); }
+    out.push({ mon, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length });
+    mon = addDays(mon, -7);
+  }
+  return out; // de la más reciente a la más antigua
+}
+
+function viewWeekly() {
+  const weeks = weeklyWeights(8);
+  if (weeks.filter((w) => w.avg != null).length < 1) return '';
+  const rows = weeks.map((w, i) => {
+    if (w.avg == null) return '';
+    const prev = weeks.slice(i + 1).find((x) => x.avg != null);
+    const diff = prev ? w.avg - prev.avg : null;
+    const pct = prev ? (diff / prev.avg) * 100 : null;
+    const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '');
+    return `<tr>
+      <th scope="row">${w.mon === mondayOf(today()) ? 'Esta' : dateShort(w.mon)}</th>
+      <td><b>${fmt(w.avg, 2)}</b></td>
+      <td>${diff == null ? '–' : `${sign(diff)}${fmt(Math.abs(diff), 2)} kg`}</td>
+      <td class="pct">${pct == null ? '' : `${sign(pct)}${fmt(Math.abs(pct), 1)} %`}</td>
+      <td class="pct">${w.count}/7</td>
+    </tr>`;
+  }).join('');
+  return `<details class="detail compact" open>
+    <summary>Medias semanales</summary>
+    <div class="table-wrap"><table class="nut-table compact">
+      <thead><tr><th scope="col">Semana del</th><th scope="col">Media (kg)</th><th scope="col">Cambio</th><th scope="col">%</th><th scope="col">Pesajes</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="hint">Compara medias semanales y no pesajes sueltos: el peso de un día sube y baja con el agua, la sal o la comida del día anterior.</p>
+  </details>`;
+}
+
+function viewEnergy() {
+  const de = dataEnergy();
+  const fe = formulaEnergy();
+  const g = S.settings.goals;
+  const rate = S.settings.rate ?? -0.5;
+  const tdee = de.ready ? de.tdee : fe?.tdee;
+  const w = latestWeight();
+  let body = '';
+  if (de.ready) {
+    body = `<div class="stats">
+        <div><span class="stat-l">Tu mantenimiento</span><span class="stat-v">${fmt(Math.round(de.tdee / 10) * 10)}<small> kcal</small></span><span class="stat-s">según tus datos</span></div>
+        <div><span class="stat-l">Comes de media</span><span class="stat-v">${fmt(de.kcalAvg)}<small> kcal</small></span><span class="stat-s">${de.intakeDays} días apuntados</span></div>
+        <div><span class="stat-l">Tendencia</span><span class="stat-v">${de.weekly > 0 ? '+' : de.weekly < 0 ? '−' : ''}${fmt(Math.abs(de.weekly), 2)}<small> kg/sem</small></span><span class="stat-s">${de.weightDays} pesajes</span></div>
+      </div>
+      <p class="hint">Calculado con las últimas 4 semanas: lo que comes de media menos lo que explica el cambio de tu peso (1 kg ≈ 7.700 kcal). Solo es fiable si apuntas todo lo que comes.${fe ? ` La fórmula daría ${fmt(Math.round(fe.tdee / 10) * 10)} kcal.` : ''}</p>`;
+  } else {
+    body = `<div class="stats">
+        <div><span class="stat-l">Mantenimiento ${fe ? 'orientativo' : ''}</span><span class="stat-v">${fe ? fmt(Math.round(fe.tdee / 10) * 10) : '–'}<small> kcal</small></span><span class="stat-s">${fe ? 'según fórmula' : 'faltan datos'}</span></div>
+      </div>
+      <p class="hint">${fe ? 'Es una estimación con fórmula (Mifflin-St Jeor y tu nivel de actividad). ' : `Rellena tu sexo, año de nacimiento, altura y actividad en <button type="button" class="link" data-act="goto" data-tab="ajustes">Ajustes</button> para una primera estimación. `}
+      Para calcular tu gasto real hacen falta 14 días con comidas apuntadas y 8 pesajes en las últimas 4 semanas: llevas ${de.intakeDays} días y ${de.weightDays} pesajes.</p>`;
+  }
+  let calc = '';
+  if (tdee) {
+    const target = Math.round((tdee + (rate * KCAL_PER_KG) / 7) / 10) * 10;
+    const floor = fe ? fe.bmr : 1500;
+    const pct = w ? (rate / w) * 100 : null;
+    calc = `<div class="calc">
+      <label class="field"><span>Ritmo que buscas</span>
+        <span class="input-unit"><input id="rate-in" type="text" inputmode="decimal" value="${inputVal(rate, 2)}" data-change="rate"><em>kg/semana</em></span>
+      </label>
+      <p>Para ${rate < 0 ? 'bajar' : rate > 0 ? 'subir' : 'mantener'}${rate ? ` ${fmt(Math.abs(rate), 2)} kg por semana${pct ? ` (${fmt(Math.abs(pct), 1)} % de tu peso)` : ''}` : ' tu peso'}, come unas <b>${fmt(target)} kcal</b> al día${g.kcal ? `; tu objetivo ahora es de ${fmt(g.kcal)}` : ''}.</p>
+      ${target < floor ? `<p class="notice small">Está por debajo de ${fe ? 'tu metabolismo basal' : '1.500 kcal'}. Es mejor un ritmo más suave.</p>` : ''}
+      <button type="button" class="btn ghost small" data-act="use-target" data-kcal="${target}">Usar ${fmt(target)} kcal como objetivo</button>
+    </div>`;
+  }
+  return `<section class="card">
+    <div class="card-head"><h2>Gasto calórico</h2></div>
+    ${body}
+    ${calc}
+  </section>`;
+}
+
+function viewMeasures() {
+  const dates = Object.keys(S.measures).sort();
+  const h = S.settings.profile.height;
+  if (!dates.length) {
+    return `<section class="card">
+      <div class="card-head"><h2>Medidas</h2><button type="button" class="btn small" data-act="measure-new">Nueva medición</button></div>
+      <p class="muted">Mídete cada 2–4 semanas, por la mañana y en ayunas, siempre en el mismo sitio. Lo mínimo: <b>cintura</b>, <b>hombros</b> y <b>cuello</b>. Con ellas la app calcula tu % de grasa estimado y la relación entre hombros y cintura.</p>
+    </section>`;
+  }
+  const waist = latestMeasure('cintura')?.v;
+  const shoulders = latestMeasure('hombros')?.v;
+  const bf = navyBodyFat();
+  const measured = latestMeasure('grasa')?.v;
+  const ratios = `<div class="stats">
+      <div><span class="stat-l">Cintura / altura</span><span class="stat-v">${waist && h ? fmt(waist / h, 2) : '–'}</span><span class="stat-s">${waist && h ? (waist / h < 0.5 ? 'por debajo de 0,5' : 'objetivo: menos de 0,5') : 'falta altura o cintura'}</span></div>
+      <div><span class="stat-l">Hombros / cintura</span><span class="stat-v">${waist && shoulders ? fmt(shoulders / waist, 2) : '–'}</span><span class="stat-s">cuanto más alto, más forma de V</span></div>
+      <div><span class="stat-l">% grasa estimado</span><span class="stat-v">${bf != null ? fmt(bf, 1) : '–'}<small>${bf != null ? ' %' : ''}</small></span><span class="stat-s">${bf != null ? 'fórmula de la Marina' : 'falta cintura, cuello o perfil'}${measured != null ? ` · medido ${fmt(measured, 1)} %` : ''}</span></div>
+    </div>`;
+  const rows = MEASURES.map((m) => {
+    const s = measureSeries(m.k);
+    if (!s.length) return '';
+    const last = s[s.length - 1];
+    const first = s[0];
+    const diff = s.length > 1 ? last.v - first.v : null;
+    return `<tr><th scope="row">${m.l}</th><td><b>${fmt(last.v, 1)}</b> ${m.u}</td>
+      <td>${diff == null ? '–' : `${diff > 0 ? '+' : diff < 0 ? '−' : ''}${fmt(Math.abs(diff), 1)} ${m.u}`}</td>
+      <td class="pct">${s.length > 1 ? `desde ${dateShort(first.d)}` : dateShort(last.d)}</td></tr>`;
+  }).join('');
+  const withSeries = MEASURES.filter((m) => measureSeries(m.k).length >= 2);
+  if (!S.ui.measureK || !withSeries.some((m) => m.k === S.ui.measureK)) S.ui.measureK = withSeries[0]?.k || null;
+  return `<section class="card">
+    <div class="card-head"><h2>Medidas</h2><button type="button" class="btn small" data-act="measure-new">Nueva medición</button></div>
+    ${ratios}
+    <div class="table-wrap"><table class="nut-table compact">
+      <thead><tr><th scope="col">Medida</th><th scope="col">Última</th><th scope="col">Cambio</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${withSeries.length ? `<div class="chips scroll top-gap">${withSeries.map((m) => `<button type="button" class="chip${m.k === S.ui.measureK ? ' on' : ''}" data-act="measure-k" data-k="${m.k}" aria-pressed="${m.k === S.ui.measureK}">${m.l}</button>`).join('')}</div>
+      <div class="chart" id="measure-chart"></div>` : ''}
+    <details class="detail compact"><summary>Todas las mediciones (${dates.length})</summary>
+      <ul class="list tight">${[...dates].reverse().map((d) => `<li><button type="button" class="row" data-act="measure-open" data-date="${d}">
+        <span class="row-main">${dateLong(d)}</span>
+        <span class="row-sub">${MEASURES.filter((m) => S.measures[d][m.k] != null).map((m) => `${m.l} ${fmt(S.measures[d][m.k], 1)}`).join(' · ')}</span>
+      </button></li>`).join('')}</ul>
+    </details>
+  </section>`;
+}
+
+function drawSeries(host, pts, unit, dec = 1) {
+  if (!host) return;
+  if (pts.length < 2) { host.innerHTML = ''; return; }
+  const W = Math.max(280, host.clientWidth);
+  const H = 160;
+  const m = { l: 38, r: 12, t: 12, b: 24 };
+  const t0 = parseISO(pts[0].d).getTime();
+  const t1 = Math.max(parseISO(pts[pts.length - 1].d).getTime(), t0 + 864e5);
+  const xs = (d) => m.l + ((parseISO(d).getTime() - t0) / (t1 - t0)) * (W - m.l - m.r);
+  let lo = Math.min(...pts.map((p) => p.v));
+  let hi = Math.max(...pts.map((p) => p.v));
+  if (hi - lo < 2) { const c = (hi + lo) / 2; lo = c - 1; hi = c + 1; }
+  const step = niceStep(hi - lo, 4);
+  lo = Math.floor(lo / step) * step;
+  hi = Math.ceil(hi / step) * step;
+  const ys = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+  let g = '';
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    const y = ys(v).toFixed(1);
+    g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${fmt(v, dec)}</text>`;
+  }
+  g += `<text class="axis" x="${m.l}" y="${H - 6}">${dateShort(pts[0].d)}</text><text class="axis" x="${W - m.r}" y="${H - 6}" text-anchor="end">${dateShort(pts[pts.length - 1].d)}</text>`;
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${xs(p.d).toFixed(1)},${ys(p.v).toFixed(1)}`).join('');
+  const dots = pts.map((p) => `<circle class="w-end" cx="${xs(p.d).toFixed(1)}" cy="${ys(p.v).toFixed(1)}" r="3.5"/>`).join('');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Evolución en ${unit}">${g}<path class="w-avg" d="${path}"/>${dots}</svg>`;
+}
+
+/* Nueva medición o editar una existente */
+SHEETS.measure = {
+  title: (s) => (S.measures[s.date] && !s.isNew ? 'Editar medición' : 'Nueva medición'),
+  render: (s) => {
+    const v = S.measures[s.date] || {};
+    return `
+      <label class="field"><span>Fecha</span><input id="ms-date" type="date" value="${s.date}" max="${today()}"></label>
+      <div class="nut-box">
+        ${MEASURES.map((m) => `<label class="nut-field measure"><span>${m.l}<small>${m.hint}</small></span>
+          <span class="input-unit"><input id="ms-${m.k}" type="text" inputmode="decimal" value="${inputVal(v[m.k], 1)}" placeholder="–"><em>${m.u}</em></span></label>`).join('')}
+      </div>
+      <p class="hint">No hace falta rellenarlas todas. Mide siempre en las mismas condiciones para que se puedan comparar.</p>
+      <div class="sheet-actions">
+        ${S.measures[s.date] && !s.isNew ? '<button type="button" class="btn danger ghost" data-act="measure-del">Borrar</button>' : ''}
+        <button type="button" class="btn primary" data-act="measure-save">Guardar</button>
+      </div>`;
+  },
+};
+
+function saveMeasure(s) {
+  const date = $('#ms-date').value || today();
+  const vals = {};
+  for (const m of MEASURES) {
+    const v = num($('#ms-' + m.k).value);
+    if (v != null) vals[m.k] = v;
+  }
+  if (!Object.keys(vals).length) { toast('Rellena al menos una medida.'); return; }
+  if (s.date !== date && !s.isNew) delete S.measures[s.date];
+  S.measures[date] = { ...(s.isNew ? S.measures[date] || {} : {}), ...vals };
+  saveMeasures();
+  closeSheets();
+  toast('Medición guardada');
+}
+
 /* ---------- exportar e importar ---------- */
 
 const csvText = (s) => {
@@ -1840,6 +2368,7 @@ async function exportJSON() {
     exercises: S.exercises,
     routines: S.routines,
     workouts: S.workouts,
+    measures: S.measures,
   };
   const ok = await deliverFile(`fitness-copia-${today()}.json`, JSON.stringify(data), 'application/json');
   if (ok) {
@@ -1896,6 +2425,7 @@ async function importFile(file) {
         ['weights', data.weights || {}],
         ['exercises', data.exercises || {}],
         ['routines', data.routines || {}],
+        ['measures', data.measures || {}],
         ...Object.entries(data.days || {}).map(([d, v]) => ['day:' + d, v]),
         ...Object.entries(data.workouts || {}).map(([id, v]) => ['wk:' + id, v]),
       ];
@@ -1926,6 +2456,7 @@ document.addEventListener('click', async (ev) => {
     case 'add': pushSheet({ type: 'picker', mode: 'diary', meal: el.dataset.meal, date: S.ui.date, q: '' }); break;
     case 'edit-entry': {
       const e = dayOf(S.ui.date).entries.find((x) => x.id === el.dataset.id);
+      if (e && e.type === 'quick') { pushSheet({ type: 'quick', meal: e.meal, date: S.ui.date, entryId: e.id, draft: { name: e.name, ...e.n } }); break; }
       if (e) pushSheet({ type: 'qty', item: { type: e.type, id: e.ref }, meal: e.meal, date: S.ui.date, qty: e.qty, unit: e.unit, entryId: e.id });
       break;
     }
@@ -1933,6 +2464,41 @@ document.addEventListener('click', async (ev) => {
       const item = { type: el.dataset.type, id: el.dataset.id };
       const opts = el.dataset.qty ? { qty: Number(el.dataset.qty), unit: el.dataset.unit } : {};
       choose(item, ctxThen(top), opts);
+      break;
+    }
+    case 'quick-new': pushSheet({ type: 'quick', meal: top.meal, date: top.date, draft: { name: '' } }); break;
+    case 'pick-quick': {
+      const r = top.recent?.[Number(el.dataset.idx)];
+      if (r) pushSheet({ type: 'quick', meal: top.meal, date: top.date, draft: { name: r.name, ...r.n } });
+      break;
+    }
+    case 'quick-save': saveQuick(top); break;
+    case 'copy-yesterday': {
+      const n = copyEntries(addDays(top.date, -1), top.date, top.meal);
+      S.ui.tab = 'hoy'; S.ui.date = top.date;
+      const meal = MEAL_NAME[top.meal];
+      closeSheets();
+      toast(`${meal}: ${n} ${n === 1 ? 'alimento copiado' : 'alimentos copiados'}`);
+      break;
+    }
+    case 'copy-open': {
+      const mode = el.dataset.mode;
+      if (mode === 'day') pushSheet({ type: 'copy', mode: 'day', date: S.ui.date });
+      else pushSheet({ type: 'copy', mode: 'meal', meal: top.meal, date: top.date });
+      break;
+    }
+    case 'copy-run': {
+      const n = copyEntries(top.from, top.date, top.mode === 'day' ? null : top.meal);
+      S.ui.tab = 'hoy'; S.ui.date = top.date;
+      closeSheets();
+      toast(`${n} ${n === 1 ? 'alimento copiado' : 'alimentos copiados'}`);
+      break;
+    }
+    case 'day-type': {
+      const d = ensureDay(S.ui.date);
+      d.type = isTrainDay(S.ui.date) ? 'rest' : 'train';
+      saveDay(S.ui.date);
+      render();
       break;
     }
     case 'pick-new-food': pushSheet({ type: 'food', draft: { name: top.q || '', per100: {}, id: null, source: 'etiqueta' }, then: ctxThen(top) }); break;
@@ -2104,6 +2670,32 @@ document.addEventListener('click', async (ev) => {
         onOk: () => { delete S.workouts[id]; saveWorkout(id); closeSheets(); toast('Entrenamiento borrado'); } });
       break;
     }
+    case 'sex': {
+      S.settings.profile.sex = el.dataset.v;
+      saveSettings();
+      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      break;
+    }
+    case 'use-target': S.settings.goals.kcal = Number(el.dataset.kcal); saveSettings(); render(); toast(`Objetivo: ${fmt(Number(el.dataset.kcal))} kcal`); break;
+    case 'measure-new': pushSheet({ type: 'measure', date: today(), isNew: true }); break;
+    case 'measure-open': pushSheet({ type: 'measure', date: el.dataset.date, isNew: false }); break;
+    case 'measure-save': saveMeasure(top); break;
+    case 'measure-del': delete S.measures[top.date]; saveMeasures(); closeSheets(); toast('Medición borrada'); break;
+    case 'measure-k': S.ui.measureK = el.dataset.k; render(); break;
+    case 'ex-cfg': pushSheet({ type: 'ex-cfg', id: el.dataset.id }); break;
+    case 'cfg-save': {
+      const min = Math.round(num($('#cfg-min').value) || 0);
+      const max = Math.round(num($('#cfg-max').value) || 0);
+      const inc = num($('#cfg-inc').value);
+      if (!min || !max || min > max) { toast('El mínimo tiene que ser menor o igual que el máximo.'); break; }
+      if (!inc || inc <= 0) { toast('Pon un incremento de peso mayor que cero.'); break; }
+      S.settings.exCfg = { ...(S.settings.exCfg || {}), [top.id]: { min, max, inc } };
+      saveSettings();
+      popSheet();
+      toast('Rango guardado');
+      break;
+    }
+    case 'cfg-reset': { const c = { ...(S.settings.exCfg || {}) }; delete c[top.id]; S.settings.exCfg = c; saveSettings(); popSheet(); break; }
     case 'ex-filter': top.muscle = el.dataset.m; renderSheets(); break;
     case 'ex-pick': addExerciseTo(top.target, el.dataset.id); break;
     case 'ex-new': pushSheet({ type: 'ex-edit', isNew: true, draft: { id: 'u-' + uid(), name: top.q || '', primary: top.muscle ? [top.muscle] : [], secondary: [] }, then: top.target || null }); break;
@@ -2163,7 +2755,7 @@ document.addEventListener('click', async (ev) => {
     }
     case 'import': $('#import-file').click(); break;
     case 'wipe':
-      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, los entrenamientos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar.', ok: 'Borrar todo', danger: true,
+      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, los entrenamientos, las medidas, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar.', ok: 'Borrar todo', danger: true,
         onOk: async () => {
           pending.forEach((p) => clearTimeout(p.t));
           pending.clear();
@@ -2214,6 +2806,19 @@ document.addEventListener('change', (ev) => {
   }
   const kind = el.dataset.change;
   if (kind === 'rest-sound') { S.settings.restSound = el.checked; saveSettings(); return; }
+  if (kind === 'rate') {
+    const v = num(el.value);
+    if (v == null || Math.abs(v) > 2) { toast('Pon un ritmo entre −2 y 2 kg por semana.'); return; }
+    S.settings.rate = v;
+    saveSettings();
+    render();
+    return;
+  }
+  if (kind === 'copy-from') {
+    const top = S.sheets[S.sheets.length - 1];
+    if (top && el.value) { top.from = el.value; renderSheets(); }
+    return;
+  }
   if (kind === 'wk-date') {
     const top = S.sheets[S.sheets.length - 1];
     const w = S.workouts[top?.id];
@@ -2259,11 +2864,27 @@ document.addEventListener('submit', (ev) => {
     g.c = num($('#g-c').value);
     g.f = num($('#g-f').value);
     g.steps = num($('#g-steps').value);
+    const gt = S.settings.goalsTrain;
+    gt.kcal = num($('#gt-kcal').value);
+    gt.p = num($('#gt-p').value);
+    gt.c = num($('#gt-c').value);
+    gt.f = num($('#gt-f').value);
     saveSettings();
     const fromMacros = (g.p || 0) * 4 + (g.c || 0) * 4 + (g.f || 0) * 9;
     toast('Objetivos guardados');
     const chk = $('#goal-check');
     if (chk && g.kcal && fromMacros) chk.textContent = `Tus macros suman ${fmt(fromMacros)} kcal${Math.abs(fromMacros - g.kcal) > 60 ? `, ${fromMacros > g.kcal ? 'más' : 'menos'} que tu objetivo de ${fmt(g.kcal)}` : ', en línea con tu objetivo'}.`;
+  } else if (form === 'profile') {
+    const pr = S.settings.profile;
+    const y = num($('#pf-year').value);
+    const h = num($('#pf-height').value);
+    if (y != null && (y < 1900 || y > new Date().getFullYear() - 10)) { toast('Revisa el año de nacimiento.'); return; }
+    if (h != null && (h < 100 || h > 250)) { toast('La altura va en centímetros, por ejemplo 180.'); return; }
+    pr.birthYear = y;
+    pr.height = h;
+    pr.activity = Number($('#pf-activity').value) || 1.55;
+    saveSettings();
+    toast('Datos guardados');
   } else if (form === 'manual-code') {
     const code = $('#code-in').value.replace(/\D/g, '');
     if (code.length < 8) { toast('El código tiene 8 o 13 cifras.'); return; }

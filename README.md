@@ -12,12 +12,12 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 
 ## Qué hace ahora
 
-- **Hoy**: calorías y macros del día frente a tus objetivos, pasos y peso, cinco comidas (desayuno, comida, merienda, cena y entre horas) y la tabla nutricional completa con % del valor de referencia europeo.
+- **Hoy**: calorías y macros del día frente a tus objetivos (distintos en días de entreno y de descanso si quieres), repetir comidas de ayer o copiar las de otro día, macros a mano para platos que no se pueden pesar, pasos y peso, cinco comidas (desayuno, comida, merienda, cena y entre horas) y la tabla nutricional completa con % del valor de referencia europeo.
 - **Escáner de códigos de barras** con la cámara. Si el producto no está guardado, se busca en [Open Food Facts](https://world.openfoodfacts.org); si tampoco está ahí, se copian los datos de la etiqueta una vez y quedan guardados.
 - **Recetas**: ingredientes con sus gramos, raciones y peso del plato cocinado, para apuntar por raciones o por gramos servidos.
 - **Básicos**: unos 35 alimentos comunes con valores medios orientativos.
-- **Entreno**: unos 70 ejercicios con sus músculos principales y secundarios, ejercicios propios, rutinas, registro de series (kg, repeticiones, calentamiento), lo que hiciste la última vez, cronómetro de descanso que arranca al marcar una serie, historial con 1RM estimado y series semanales por músculo (1 por principal, 0,5 por secundario).
-- **Progreso**: gráfica de peso con media de 7 días, pasos de las últimas dos semanas y media de calorías.
+- **Entreno**: unos 70 ejercicios con sus músculos principales y secundarios, ejercicios propios, rutinas, registro de series (kg, repeticiones, calentamiento), lo que hiciste la última vez, sugerencias de progresión (doble progresión con rango e incremento por ejercicio), cronómetro de descanso que arranca al marcar una serie, historial con 1RM estimado y series semanales por músculo (1 por principal, 0,5 por secundario).
+- **Progreso**: gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos de las últimas dos semanas y media de calorías.
 - **Copias**: exporta todo a `.json` (para restaurar) o a `.csv` (para Excel, con separador `;` y coma decimal). La app avisa si pasa una semana sin copia.
 - Funciona sin conexión una vez abierta por primera vez (salvo la búsqueda en Open Food Facts).
 

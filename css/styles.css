@@ -416,7 +416,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .chart .s-bar { fill: var(--muted); opacity: 0.55; }
 .chart .s-bar.hit { fill: var(--accent); opacity: 1; }
 .chart .goal { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 4 4; }
-.chart .goal-l { fill: var(--ink); }
+.chart .goal-l { fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .tip {
   position: absolute;
   top: 4px;
@@ -587,6 +587,10 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .wk-ex-name { flex: 1; border: 0; background: none; text-align: left; padding: 4px 0; font-family: var(--font-display); font-weight: 700; font-size: var(--step-1); color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
 .wk-muscles { color: var(--muted); font-size: var(--step--1); margin-top: 2px; }
 .wk-last { font-size: var(--step--1); margin-top: 6px; background: var(--sunk); border-radius: 8px; padding: 5px 8px; }
+.wk-sug { font-size: var(--step--1); margin-top: 6px; padding: 5px 8px; border-radius: 8px; border-left: 3px solid var(--muted); background: var(--surface); }
+.wk-sug.up { border-left-color: var(--accent); background: var(--accent-soft); }
+.wk-sug.down { border-left-color: var(--carb); }
+.wk-cfg { border: 0; background: none; padding: 4px 0; margin-top: 4px; color: var(--accent); font-size: 0.75rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .sets { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .sets th { font-size: 0.75rem; color: var(--muted); font-weight: 700; text-align: center; padding: 2px; }
 .sets td { padding: 3px 2px; text-align: center; }
@@ -639,6 +643,20 @@ body.resting .sheet-body { padding-bottom: calc(110px + env(safe-area-inset-bott
 body.resting .sheet-actions { padding-bottom: 76px; }
 body.resting #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 170px); }
 .sheet-actions .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+
+/* ---------- medidas, gasto y tipo de día ---------- */
+.day-type { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: var(--step--1); margin: 4px 0 8px; }
+.repeat { display: grid; gap: 6px; justify-items: start; }
+.repeat-btn { width: 100%; text-align: left; display: grid; gap: 2px; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 12px; padding: 10px 12px; }
+.repeat-btn b { color: var(--accent); }
+.repeat-btn span { font-size: var(--step--1); color: var(--muted); overflow-wrap: anywhere; }
+.calc { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; display: grid; gap: 8px; }
+.calc .field { max-width: 240px; margin-bottom: 0; }
+.sub-head { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.sub-head h3 small { font-weight: 400; color: var(--muted); }
+.nut-field.measure span:first-child { display: grid; }
+.nut-field.measure small { color: var(--muted); font-size: 0.75rem; line-height: 1.3; }
+select { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 8px 10px; }
 
 @keyframes rise { from { transform: translateY(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
