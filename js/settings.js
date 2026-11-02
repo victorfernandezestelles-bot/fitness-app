@@ -80,7 +80,10 @@ export function viewAjustes() {
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Descanso entre series</h2></div>
+    <div class="card-head"><h2>Entreno</h2></div>
+    <label class="check"><input type="checkbox" data-change="keep-awake" ${S.settings.keepAwake ? 'checked' : ''}> Mantener la pantalla encendida mientras entrenas</label>
+    <label class="check"><input type="checkbox" data-change="show-rir" ${S.settings.showRir !== false ? 'checked' : ''}> Mostrar la columna RIR (repeticiones en reserva)</label>
+    <h3 class="sub-h top-gap">Descanso entre series</h3>
     <p class="muted">El cronómetro arranca solo al marcar una serie como hecha. Si cambias el tiempo durante un ejercicio, la app lo recuerda para ese ejercicio.</p>
     <div class="field top-gap"><span>Por defecto</span>
       <div class="chips">${[60, 90, 120, 150, 180, 240].map((v) => `<button type="button" class="chip${S.settings.rest === v ? ' on' : ''}" data-act="rest-default" data-s="${v}" aria-pressed="${S.settings.rest === v}">${restLabel(v)}</button>`).join('')}</div>
@@ -226,6 +229,8 @@ CHANGES['#import-file'] = (el) => {
   if (f) importFile(f);
 };
 CHANGES['rest-sound'] = (el) => { S.settings.restSound = el.checked; saveSettings(); };
+CHANGES['keep-awake'] = (el) => { S.settings.keepAwake = el.checked; saveSettings(); };
+CHANGES['show-rir'] = (el) => { S.settings.showRir = el.checked; saveSettings(); };
 
 FORMS.goals = () => {
   const g = S.settings.goals;

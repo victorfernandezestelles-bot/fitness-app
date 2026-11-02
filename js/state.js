@@ -22,6 +22,7 @@ export const defaultSettings = () => ({
   rate: -0.5,
   theme: 'auto',
   lastBackup: null, rest: 120, restSound: true, restByEx: {}, exCfg: {},
+  keepAwake: true, showRir: true, exNotes: {},
 });
 
 export const S = {

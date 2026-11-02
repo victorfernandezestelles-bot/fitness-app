@@ -129,40 +129,69 @@ SHEETS.workout = {
   render: (s) => {
     const w = S.workouts[s.id];
     if (!w) return '<p class="empty">Este entrenamiento ya no existe.</p>';
+    const showRir = S.settings.showRir !== false;
+    const ssLetters = supersetLetters(w);
     const exs = w.exercises.map((we, i) => {
       const ex = getEx(we.exId);
       const last = lastPerformance(we.exId, w);
       const cfg = exCfg(we.exId);
       const sug = suggestion(last, cfg);
+      const fixedNote = S.settings.exNotes?.[we.exId];
+      const ssTag = we.ss && ssLetters[we.ss] ? `<span class="ss-tag">Superserie ${ssLetters[we.ss]}</span>` : '';
+      const ssCls = we.ss && ssLetters[we.ss] ? ` in-ss${w.exercises[i + 1]?.ss === we.ss ? ' ss-next' : ''}${w.exercises[i - 1]?.ss === we.ss ? ' ss-prev' : ''}` : '';
+      const allDone = we.sets.length > 0 && we.sets.every((x) => x.done);
+      const head = `
+        <div class="wk-ex-head">
+          <button type="button" class="wk-ex-name" data-act="ex-history" data-id="${esc(we.exId)}">${esc(exName(we))}</button>
+          <button type="button" class="icon-btn small" data-act="wk-ex-menu" data-i="${i}" aria-label="Opciones de ${esc(exName(we))}">⋯</button>
+        </div>`;
+      // Vista compacta: los ejercicios terminados se pliegan
+      if (allDone && !s.open?.[i]) {
+        const work = we.sets.filter((x) => x.t !== 'w');
+        return `<section class="wk-ex folded${ssCls}">${ssTag}${head}
+          <button type="button" class="wk-fold" data-act="wk-ex-toggle" data-i="${i}">
+            <span>✓ ${work.length} ${work.length === 1 ? 'serie' : 'series'} · ${work.map(setText).join(' · ')}</span><span class="wk-fold-more">Ver</span>
+          </button>
+        </section>`;
+      }
+      const active = we.sets.findIndex((x) => !x.done);
       let n = 0;
       const rows = we.sets.map((st, j) => {
         const warm = st.t === 'w';
         if (!warm) n++;
         let ph = !warm && last ? last.sets[n - 1] || last.sets[last.sets.length - 1] : null;
         if (ph && sug?.type === 'up') ph = { kg: sug.kg, reps: cfg.min };
-        return `<tr class="${st.done ? 'done' : ''}${warm ? ' warm' : ''}">
+        const row = `<tr class="${st.done ? 'done' : ''}${warm ? ' warm' : ''}${j === active ? ' active' : ''}">
           <td><button type="button" class="set-type" data-act="set-type" data-i="${i}" data-j="${j}" aria-label="Serie ${warm ? 'de calentamiento' : n}. Toca para cambiar el tipo">${warm ? 'C' : n}</button></td>
           <td><input type="text" inputmode="decimal" data-input="set-kg" data-i="${i}" data-j="${j}" value="${inputVal(st.kg, 2)}" placeholder="${ph ? inputVal(ph.kg, 2) : 'kg'}" aria-label="Kilos"></td>
           <td><input type="text" inputmode="numeric" data-input="set-reps" data-i="${i}" data-j="${j}" value="${st.reps ?? ''}" placeholder="${ph ? ph.reps ?? '' : 'reps'}" aria-label="Repeticiones"></td>
+          ${showRir ? `<td class="rir"><input type="text" inputmode="numeric" data-input="set-rir" data-i="${i}" data-j="${j}" value="${st.rir ?? ''}" placeholder="–" aria-label="RIR, repeticiones en reserva"></td>` : ''}
           <td><button type="button" class="set-done" data-act="set-done" data-i="${i}" data-j="${j}" aria-pressed="${!!st.done}" aria-label="Serie hecha">✓</button></td>
           <td><button type="button" class="set-del" data-act="set-del" data-i="${i}" data-j="${j}" aria-label="Quitar serie">×</button></td>
         </tr>`;
+        if (j !== active || w.end) return row;
+        // Botones − / + en la serie que toca hacer
+        return row + `<tr class="step-row"><td></td>
+          <td><div class="stepper"><button type="button" data-act="step" data-i="${i}" data-j="${j}" data-f="kg" data-d="-1" aria-label="Quitar ${fmt(cfg.inc, 2)} kg">−</button><button type="button" data-act="step" data-i="${i}" data-j="${j}" data-f="kg" data-d="1" aria-label="Añadir ${fmt(cfg.inc, 2)} kg">+</button></div></td>
+          <td><div class="stepper"><button type="button" data-act="step" data-i="${i}" data-j="${j}" data-f="reps" data-d="-1" aria-label="Una repetición menos">−</button><button type="button" data-act="step" data-i="${i}" data-j="${j}" data-f="reps" data-d="1" aria-label="Una repetición más">+</button></div></td>
+          <td colspan="${showRir ? 3 : 2}"></td></tr>`;
       }).join('');
       return `
-      <section class="wk-ex">
-        <div class="wk-ex-head">
-          <button type="button" class="wk-ex-name" data-act="ex-history" data-id="${esc(we.exId)}">${esc(exName(we))}</button>
-          <button type="button" class="icon-btn small" data-act="wk-ex-del" data-i="${i}" aria-label="Quitar ${esc(exName(we))}">×</button>
-        </div>
+      <section class="wk-ex${ssCls}">${ssTag}${head}
         <p class="wk-muscles">${esc(musclesText(ex))}</p>
+        ${fixedNote ? `<p class="wk-note"><b>Nota:</b> ${esc(fixedNote)}</p>` : ''}
+        ${we.note ? `<p class="wk-note today"><b>Hoy:</b> ${esc(we.note)}</p>` : ''}
         ${last ? `<p class="wk-last">Última vez (${dateShort(last.date)}): ${last.sets.map(setText).join(' · ')}</p>` : ''}
         ${sug ? `<p class="wk-sug ${sug.type}">${sug.text}</p>` : ''}
         <button type="button" class="wk-cfg" data-act="ex-cfg" data-id="${esc(we.exId)}">Rango ${cfg.min}–${cfg.max} reps · sube de ${fmt(cfg.inc, 2)} en ${fmt(cfg.inc, 2)} kg</button>
-        <table class="sets">
-          <thead><tr><th scope="col">Serie</th><th scope="col">Kg</th><th scope="col">Reps</th><th scope="col"><span class="sr">Hecha</span></th><th></th></tr></thead>
+        <table class="sets${showRir ? ' with-rir' : ''}">
+          <thead><tr><th scope="col">Serie</th><th scope="col">Kg</th><th scope="col">Reps</th>${showRir ? '<th scope="col" title="Repeticiones en reserva">RIR</th>' : ''}<th scope="col"><span class="sr">Hecha</span></th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <button type="button" class="btn ghost small" data-act="set-add" data-i="${i}">+ Serie</button>
+        <div class="wk-ex-foot">
+          <button type="button" class="btn ghost small" data-act="set-add" data-i="${i}">+ Serie</button>
+          ${allDone ? `<button type="button" class="btn ghost small" data-act="wk-ex-toggle" data-i="${i}">Plegar</button>` : ''}
+        </div>
       </section>`;
     }).join('');
     const st = workoutStats(w);
@@ -178,7 +207,7 @@ SHEETS.workout = {
       </div>
       ${exs || '<p class="empty">Añade el primer ejercicio. Si lo has hecho antes, verás lo que levantaste la última vez.</p>'}
       <button type="button" class="btn wide" data-act="wk-ex-add">+ Añadir ejercicio</button>
-      <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen.</p>
+      <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen.${showRir ? ' RIR: repeticiones que te quedaban en reserva (0 = al fallo).' : ''}</p>
       <div class="sheet-actions">
         <button type="button" class="btn danger ghost" data-act="wk-del">Borrar</button>
         ${w.exercises.length && !w.routineId ? '<button type="button" class="btn ghost" data-act="wk-to-routine">Crear rutina</button>' : ''}
@@ -187,9 +216,65 @@ SHEETS.workout = {
   },
 };
 
+// Una superserie solo agrupa ejercicios seguidos: quien se queda suelto sale de ella
+export function tidySupersets(w) {
+  w.exercises.forEach((we, i) => {
+    if (!we.ss) return;
+    if (w.exercises[i - 1]?.ss !== we.ss && w.exercises[i + 1]?.ss !== we.ss) delete we.ss;
+  });
+}
+
+// Letra de cada superserie (A, B, C…) por orden de aparición
+function supersetLetters(w) {
+  const out = {};
+  let k = 0;
+  w.exercises.forEach((we, i) => {
+    if (!we.ss || out[we.ss]) return;
+    const partners = w.exercises.filter((x) => x.ss === we.ss).length;
+    if (partners >= 2) out[we.ss] = String.fromCharCode(65 + k++);
+  });
+  return out;
+}
+
+/* Opciones de un ejercicio dentro de la sesión */
+SHEETS['wk-ex-menu'] = {
+  title: (s) => exName(S.workouts[s.wid].exercises[s.i]),
+  render: (s) => {
+    const w = S.workouts[s.wid];
+    const we = w.exercises[s.i];
+    const next = w.exercises[s.i + 1];
+    const inSs = we.ss && w.exercises.filter((x) => x.ss === we.ss).length >= 2;
+    return `
+      <div class="menu-list">
+        <button type="button" class="menu-item" data-act="wk-ex-move" data-d="-1" ${s.i === 0 ? 'disabled' : ''}>Subir</button>
+        <button type="button" class="menu-item" data-act="wk-ex-move" data-d="1" ${s.i === w.exercises.length - 1 ? 'disabled' : ''}>Bajar</button>
+        <button type="button" class="menu-item" data-act="wk-ex-replace">Sustituir por otro ejercicio…</button>
+        ${next ? `<button type="button" class="menu-item" data-act="ss-join">${we.ss && next.ss === we.ss ? 'Ya está en superserie con el siguiente' : `Hacer superserie con «${esc(exName(next))}»`}</button>` : ''}
+        ${inSs ? '<button type="button" class="menu-item" data-act="ss-split">Sacar de la superserie</button>' : ''}
+        <button type="button" class="menu-item" data-act="ex-note-open">Notas…</button>
+        <button type="button" class="menu-item danger" data-act="wk-ex-del">Quitar de la sesión</button>
+      </div>
+      <p class="hint">En una superserie haces una serie de cada ejercicio seguidas y el descanso empieza al terminar la del último.</p>`;
+  },
+};
+
+/* Notas: la fija del ejercicio (sale siempre) y la de esta sesión */
+SHEETS['ex-note'] = {
+  title: () => 'Notas',
+  render: (s) => {
+    const we = S.workouts[s.wid].exercises[s.i];
+    return `
+      <p class="sheet-sub"><b>${esc(exName(we))}</b></p>
+      <label class="field"><span>Nota fija del ejercicio</span><textarea id="note-fixed" rows="2" placeholder="p. ej. asiento en el 4, agarre neutro">${esc(S.settings.exNotes?.[we.exId] || '')}</textarea></label>
+      <p class="hint">Sale cada vez que hagas este ejercicio.</p>
+      <label class="field top-gap"><span>Nota de hoy</span><textarea id="note-today" rows="2" placeholder="p. ej. molestia en el codo">${esc(we.note || '')}</textarea></label>
+      <div class="sheet-actions"><button type="button" class="btn primary" data-act="ex-note-save">Guardar</button></div>`;
+  },
+};
+
 /* Selector de ejercicios */
 SHEETS['ex-picker'] = {
-  title: () => 'Añadir ejercicio',
+  title: (s) => (s.mode === 'replace' ? 'Sustituir ejercicio' : s.mode === 'library' ? 'Ejercicios' : 'Añadir ejercicio'),
   render: (s) => `
     <div class="pick-tools">
       <input id="ex-q" type="search" placeholder="Buscar ejercicio" value="${esc(s.q || '')}" autocomplete="off" data-input="ex-q">
@@ -212,6 +297,33 @@ export function fillExList(s) {
       <span class="row-main">${esc(e.name)}${e.builtin === false || !EXERCISES_BY_ID[e.id] ? ' <em class="tag">propio</em>' : ''}</span>
       <span class="row-sub">${esc(musclesText(e))}</span>
     </button></li>`).join('')}</ul>` : '<p class="empty">Ningún ejercicio coincide. Puedes crearlo.</p>';
+}
+
+export function replaceExercise(target, idx, exId) {
+  const w = S.workouts[target.id];
+  const we = w.exercises[idx];
+  const oldId = we.exId;
+  if (oldId === exId) { popTo(target); return; }
+  we.exId = exId;
+  we.name = getEx(exId)?.name || '';
+  saveWorkout(w.id);
+  popTo(target);
+  const r = w.routineId && S.routines[w.routineId];
+  if (r && r.items.some((it) => it.exId === oldId)) {
+    pushSheet({
+      type: 'confirm',
+      title: 'Cambiar también en la rutina',
+      text: `Has cambiado «${getEx(oldId)?.name || 'el ejercicio'}» por «${we.name}» en esta sesión. ¿Lo cambio también en la rutina «${r.name}» para las próximas veces?`,
+      ok: 'Cambiar en la rutina',
+      onOk: () => {
+        r.items.forEach((it) => { if (it.exId === oldId) it.exId = exId; });
+        saveRoutines();
+        toast(`Rutina «${r.name}» actualizada`);
+      },
+    });
+  } else {
+    toast(`Sustituido por ${we.name}`);
+  }
 }
 
 export function addExerciseTo(target, exId) {
@@ -401,7 +513,7 @@ export function openWorkout(id) {
 }
 
 export async function exportCsvEntrenos() {
-  const rows = [['fecha', 'entrenamiento', 'ejercicio', 'serie', 'tipo', 'kg', 'repeticiones', '1RM estimado (kg)', 'músculos principales'].join(';')];
+  const rows = [['fecha', 'entrenamiento', 'ejercicio', 'serie', 'tipo', 'kg', 'repeticiones', 'RIR', '1RM estimado (kg)', 'músculos principales', 'superserie', 'nota de la sesión'].join(';')];
   for (const w of [...workoutsSorted()].reverse()) {
     for (const we of w.exercises) {
       const ex = getEx(we.exId);
@@ -410,8 +522,8 @@ export async function exportCsvEntrenos() {
         if (!isEffective(st) && st.t !== 'w') continue;
         const warm = st.t === 'w';
         if (!warm) n++;
-        rows.push([w.date, w.name, exName(we), warm ? '' : n, warm ? 'calentamiento' : 'efectiva', csvNum(st.kg, 2), st.reps ?? '',
-          csvNum(warm ? null : e1rm(st.kg, st.reps), 1), (ex?.primary || []).map((m) => MUSCLE_NAME[m]).join(', ')].map(csvText).join(';'));
+        rows.push([w.date, w.name, exName(we), warm ? '' : n, warm ? 'calentamiento' : 'efectiva', csvNum(st.kg, 2), st.reps ?? '', st.rir ?? '',
+          csvNum(warm ? null : e1rm(st.kg, st.reps), 1), (ex?.primary || []).map((m) => MUSCLE_NAME[m]).join(', '), we.ss ? 'sí' : '', we.note || ''].map(csvText).join(';'));
       }
     }
   }
@@ -480,7 +592,7 @@ export function startRest(exId, name) {
   rest = { end: Date.now() + total * 1000, total, exId, name, finished: false, timer: null };
   rest.timer = setInterval(tickRest, 250);
   saveRestState();
-  keepAwake(true);
+  updateWake();
   drawRest();
 }
 
@@ -503,7 +615,7 @@ export function stopRest() {
   saveRestState();
   restEl().hidden = true;
   document.body.classList.remove('resting');
-  keepAwake(false);
+  updateWake();
 }
 
 export function tickRest() {
@@ -555,7 +667,7 @@ export function restoreRest() {
   } catch (e) { /* nada que restaurar */ }
 }
 
-HOOKS.visible.push(() => { if (rest) { tickRest(); if (!rest?.finished) keepAwake(true); } });
+HOOKS.visible.push(() => { if (rest) tickRest(); updateWake(); });
 
 /* ---------- acciones ---------- */
 
@@ -599,8 +711,10 @@ Object.assign(ACTIONS, {
       return;
   },
   'wk-ex-del': async (el, top) => {
-      const w = S.workouts[top.id];
-      const i = Number(el.dataset.i);
+      const fromMenu = top.type === 'wk-ex-menu';
+      const w = S.workouts[fromMenu ? top.wid : top.id];
+      const i = fromMenu ? top.i : Number(el.dataset.i);
+      if (fromMenu) popTo(top.parent);
       const old = w.exercises[i];
       undoable(`${exName(old)} quitado`,
         () => { w.exercises.splice(i, 1); saveWorkout(w.id); renderSheets(); },
@@ -664,8 +778,9 @@ Object.assign(ACTIONS, {
   'ex-filter': async (el, top, act) => {
       top.muscle = el.dataset.m; renderSheets();
   },
-  'ex-pick': async (el, top, act) => {
-      addExerciseTo(top.target, el.dataset.id);
+  'ex-pick': async (el, top) => {
+      if (top.mode === 'replace') replaceExercise(top.target, top.idx, el.dataset.id);
+      else addExerciseTo(top.target, el.dataset.id);
   },
   'ex-new': async (el, top, act) => {
       pushSheet({ type: 'ex-edit', isNew: true, draft: { id: 'u-' + uid(), name: top.q || '', primary: top.muscle ? [top.muscle] : [], secondary: [] }, then: top.target || null });
@@ -775,7 +890,9 @@ const multi_set_type = async (el, top, act) => {
           const repIn = $(`[data-input="set-reps"][data-i="${i}"][data-j="${j}"]`);
           if (st.kg == null && kgIn) st.kg = num(kgIn.placeholder);
           if (st.reps == null && repIn) { const r = num(repIn.placeholder); st.reps = r == null ? null : Math.round(r); }
-          startRest(we.exId, exName(we));
+          const nextEx = w.exercises[i + 1];
+          if (we.ss && nextEx && nextEx.ss === we.ss) toast(`Superserie: ahora ${exName(nextEx)}`);
+          else startRest(we.exId, exName(we));
         }
       }
       saveWorkout(w.id);
@@ -786,6 +903,83 @@ ACTIONS['set-type'] = multi_set_type;
 ACTIONS['set-done'] = multi_set_type;
 ACTIONS['set-del'] = multi_set_type;
 
+Object.assign(ACTIONS, {
+  // Botones − / +: kilos según el incremento del ejercicio y repeticiones de 1 en 1
+  'step': (el, top) => {
+    const w = S.workouts[top.id];
+    const i = Number(el.dataset.i), j = Number(el.dataset.j);
+    const we = w?.exercises[i];
+    const st = we?.sets[j];
+    if (!st) return;
+    const f = el.dataset.f;
+    const d = Number(el.dataset.d);
+    const input = $(`[data-input="set-${f}"][data-i="${i}"][data-j="${j}"]`);
+    const base = st[f] ?? num(input?.placeholder) ?? 0;
+    if (f === 'kg') st.kg = Math.max(0, Math.round((base + d * exCfg(we.exId).inc) * 100) / 100);
+    else st.reps = Math.max(0, Math.round(base + d));
+    if (input) input.value = f === 'kg' ? inputVal(st.kg, 2) : String(st.reps);
+    saveWorkout(w.id);
+  },
+  'wk-ex-toggle': (el, top) => {
+    const i = Number(el.dataset.i);
+    top.open = { ...(top.open || {}), [i]: !top.open?.[i] };
+    renderSheets();
+  },
+  'wk-ex-menu': (el, top) => pushSheet({ type: 'wk-ex-menu', wid: top.id, i: Number(el.dataset.i), parent: top }),
+  'wk-ex-move': (el, top) => {
+    const w = S.workouts[top.wid];
+    const i = top.i, j = i + Number(el.dataset.d);
+    if (j < 0 || j >= w.exercises.length) return;
+    [w.exercises[i], w.exercises[j]] = [w.exercises[j], w.exercises[i]];
+    tidySupersets(w);
+    saveWorkout(w.id);
+    top.parent.open = {};
+    popTo(top.parent);
+  },
+  'wk-ex-replace': (el, top) => pushSheet({ type: 'ex-picker', mode: 'replace', target: top.parent, idx: top.i, q: '', muscle: getEx(S.workouts[top.wid].exercises[top.i].exId)?.primary[0] || '' }),
+  'ss-join': (el, top) => {
+    const w = S.workouts[top.wid];
+    const we = w.exercises[top.i];
+    const next = w.exercises[top.i + 1];
+    if (!next) return;
+    const id = we.ss || next.ss || uid();
+    we.ss = id;
+    next.ss = id;
+    saveWorkout(w.id);
+    popTo(top.parent);
+    toast('Superserie creada');
+  },
+  'ss-split': (el, top) => {
+    const w = S.workouts[top.wid];
+    delete w.exercises[top.i].ss;
+    tidySupersets(w);
+    saveWorkout(w.id);
+    popTo(top.parent);
+  },
+  'ex-note-open': (el, top) => pushSheet({ type: 'ex-note', wid: top.wid, i: top.i, parent: top.parent }),
+  'ex-note-save': (el, top) => {
+    const w = S.workouts[top.wid];
+    const we = w.exercises[top.i];
+    const fixed = $('#note-fixed').value.trim();
+    const today_ = $('#note-today').value.trim();
+    const notes = { ...(S.settings.exNotes || {}) };
+    if (fixed) notes[we.exId] = fixed; else delete notes[we.exId];
+    S.settings.exNotes = notes;
+    saveSettings();
+    if (today_) we.note = today_; else delete we.note;
+    saveWorkout(w.id);
+    popTo(top.parent);
+  },
+});
+
+// Pantalla encendida: durante el descanso siempre, y durante todo el entreno si se activa en Ajustes
+export function updateWake() {
+  const top = S.sheets[S.sheets.length - 1];
+  const training = S.settings.keepAwake && top?.type === 'workout' && !S.workouts[top.id]?.end;
+  keepAwake(!!(rest && !rest.finished) || !!training);
+}
+HOOKS.sheetChange.push(() => updateWake());
+
 /* ---------- registro de vista y escritura ---------- */
 
 VIEWS.entreno = { html: viewEntreno };
@@ -793,6 +987,7 @@ VIEWS.entreno = { html: viewEntreno };
 Object.assign(INPUTS, {
   'set-kg': (el, top) => setField(el, top, 'kg'),
   'set-reps': (el, top) => setField(el, top, 'reps'),
+  'set-rir': (el, top) => setField(el, top, 'rir'),
   'wk-name': (el, top) => { const w = S.workouts[top.id]; if (w) { w.name = el.value; saveWorkout(w.id); } },
   'ex-q': (el, top) => { top.q = el.value; fillExList(top); },
   'exf-name': (el, top) => { top.draft.name = el.value; },
@@ -805,7 +1000,7 @@ function setField(el, top, field) {
   const st = w?.exercises[Number(el.dataset.i)]?.sets[Number(el.dataset.j)];
   if (!st) return;
   const v = num(el.value);
-  st[field] = field === 'reps' ? (v == null ? null : Math.round(v)) : v;
+  st[field] = field === 'kg' ? v : (v == null ? null : Math.max(0, Math.round(v)));
   saveWorkout(w.id);
 }
 
