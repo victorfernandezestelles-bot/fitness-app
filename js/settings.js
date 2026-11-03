@@ -6,6 +6,7 @@ import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, ren
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
 import { exportPhotos, importPhotos } from './photos.js';
+import { syncCard, syncConfigured, syncState } from './sync.js';
 
 /* ---------- vista: Ajustes ---------- */
 
@@ -26,8 +27,10 @@ export function viewAjustes() {
   <header class="page-head"><h1>Ajustes</h1></header>
 
   <nav class="chips scroll aj-nav" aria-label="Secciones de ajustes">
-    ${[['objetivos', 'Objetivos'], ['cuerpo', 'Tu cuerpo'], ['entreno', 'Entreno'], ['apariencia', 'Apariencia'], ['datos', 'Datos']].map(([k, l]) => `<button type="button" class="chip" data-act="aj-jump" data-k="${k}">${l}</button>`).join('')}
+    ${[...(syncConfigured() ? [['cuenta', 'Cuenta']] : []), ['objetivos', 'Objetivos'], ['cuerpo', 'Tu cuerpo'], ['entreno', 'Entreno'], ['apariencia', 'Apariencia'], ['datos', 'Datos']].map(([k, l]) => `<button type="button" class="chip" data-act="aj-jump" data-k="${k}">${l}</button>`).join('')}
   </nav>
+
+  ${syncCard()}
 
   <section class="card" id="aj-objetivos">
     <div class="card-head"><h2>Objetivos diarios</h2></div>
@@ -180,7 +183,7 @@ export async function importFile(file) {
   pushSheet({
     type: 'confirm',
     title: 'Restaurar copia',
-    text: `La copia es del ${data.exportedAt ? dateLong(data.exportedAt.slice(0, 10)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}. Sustituirá todos los datos que hay ahora en este teléfono.`,
+    text: `La copia es del ${data.exportedAt ? dateLong(data.exportedAt.slice(0, 10)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}. Sustituirá todos los datos que hay ahora en este teléfono${syncState.status !== 'off' ? ' y, como tienes la cuenta conectada, también en tus otros dispositivos' : ''}.`,
     ok: 'Restaurar',
     danger: true,
     onOk: async () => {
@@ -249,7 +252,7 @@ Object.assign(ACTIONS, {
       $('#import-file').click();
   },
   'wipe': async (el, top, act) => {
-      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, el sueño, los entrenamientos, el cardio, las medidas, las fotos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar.', ok: 'Borrar todo', danger: true,
+      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, el sueño, los entrenamientos, el cardio, las medidas, las fotos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar. Si tienes la cuenta conectada, se cerrará la sesión aquí, pero los datos de tu cuenta no se borran.', ok: 'Borrar todo', danger: true,
         onOk: async () => {
           await wipeAll();
           applyTheme();

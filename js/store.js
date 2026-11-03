@@ -29,7 +29,7 @@ function tx(mode, fn, name = STORE) {
     const t = db.transaction(name, mode);
     const st = t.objectStore(name);
     const out = fn(st);
-    t.oncomplete = () => resolve(out && out.result !== undefined ? out.result : out);
+    t.oncomplete = () => resolve(typeof IDBRequest !== 'undefined' && out instanceof IDBRequest ? out.result : out);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   }));

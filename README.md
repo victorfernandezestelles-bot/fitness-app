@@ -2,7 +2,7 @@
 
 App personal para el iPhone: comidas, macros y micronutrientes, recetas propias, peso, pasos y entrenamiento con recuento de series por músculo.
 
-Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el teléfono**; el código de este repositorio no contiene ningún dato personal.
+Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, si entras con tu cuenta, se sincronizan entre dispositivos (iPhone y ordenador). El código de este repositorio no contiene ningún dato personal.
 
 ## Instalarla en el iPhone
 
@@ -23,6 +23,7 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 - **Progreso**: informe semanal de lunes a domingo (peso, calorías, pasos, sueño, entrenos, series por músculo y medidas) que se puede copiar como texto, gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos y sueño de las últimas dos semanas y media de calorías.
 - **Ajustes** agrupados en objetivos, cuerpo, entreno, apariencia y datos. El texto sigue el tamaño del iPhone (o normal o grande) y hay opción de botones más grandes.
 - **Fotos de progreso privadas**: frente, lado y espalda por fecha, guardadas solo en el teléfono, con comparación lado a lado. Tienen su propia copia (.json aparte), porque no van en la copia normal.
+- **Cuenta y sincronización** (Ajustes › Cuenta): entrar con correo y contraseña para tener los mismos datos en todos los dispositivos. Se sincroniza todo menos las fotos y los ajustes de apariencia. Si un día cambia en dos sitios a la vez, se juntan las comidas de ambos.
 - **Copias**: exporta todo a `.json` (para restaurar) o a `.csv` (para Excel, con separador `;` y coma decimal). La app avisa si pasa una semana sin copia.
 - Funciona sin conexión una vez abierta por primera vez (salvo la búsqueda en Open Food Facts).
 
@@ -49,6 +50,8 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 | `js/nutrients.js`, `js/exercises.js`, `js/templates.js` | Datos de referencia |
 | `js/barcode.js` | Lector de códigos EAN-13 / EAN-8 sin librerías externas |
 | `js/off.js` | Consulta a Open Food Facts |
+| `js/sync.js` | Cuenta y sincronización con Supabase |
+| `js/config.js` | Dirección y clave pública del servidor |
 | `js/store.js` | Almacén en el teléfono (IndexedDB): datos y, aparte, fotos |
 | `sw.js` | Uso sin conexión (red primero, caché si no hay conexión) |
 | `version.json` | Versión publicada, para avisar de actualizaciones |
@@ -59,10 +62,15 @@ Funciona como una web instalable (PWA). Todos los datos se guardan **solo en el 
 
 Los datos guardados llevan un número de versión (ahora la 3, que añade el cardio y las actividades). Si una actualización cambia su formato, la app guarda antes una copia interna y convierte los datos al formato nuevo. Las copias `.json` antiguas también se convierten al restaurarlas.
 
+## Servidor (Supabase)
+
+Proyecto `fitness-app` en Supabase (región UE, Irlanda). Una sola tabla, `kv`, con una fila por dato (un día, un entreno, un alimento…) y la regla de seguridad «cada cuenta solo lee y escribe sus filas». El inicio de sesión es con correo y contraseña, sin confirmación por correo (el plan gratuito no deja cambiar las plantillas de correo sin un servidor de correo propio). La clave de `js/config.js` es la pública (*publishable*); la secreta no está en el código.
+
 ## Pendiente
 
 - Antes de publicar la app para otras personas, quitar de `js/templates.js` la plantilla «Rutina A/B en 6 sesiones» (las rutinas ya guardadas en el teléfono no se pierden).
-- Más adelante: app nativa para iOS y Android, cuentas y sincronización, sueño desde Salud o el reloj, y estimar platos del comedor a partir de una foto.
+- Para la versión pública: servidor de correo propio, confirmar el correo al crear la cuenta y recuperar la contraseña desde la app.
+- Más adelante: app nativa para iOS y Android, sueño desde Salud o el reloj, y estimar platos del comedor a partir de una foto.
 
 ## Notas
 

@@ -231,4 +231,5 @@ export async function wipeAll() {
   try { await store.photoClear(); } catch (e) { /* sin fotos */ }
   await store.put('meta', { schema: SCHEMA, createdAt: new Date().toISOString() });
   applySnapshot(migrate({}, SCHEMA));
+  SAVED.forEach((fn) => fn('!wipe'));
 }
