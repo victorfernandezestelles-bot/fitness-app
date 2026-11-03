@@ -60,13 +60,17 @@ async function setProfile(p) {
   applyAccess();
 }
 
+// Devuelve el error si no se ha podido consultar (sin conexión, servidor sin la fase 1…)
 export async function refreshProfile() {
-  if (!syncConfigured() || !isLoggedIn()) return;
+  if (!syncConfigured() || !isLoggedIn()) return null;
   try {
     const p = await rpc('my_profile');
     if (p) await setProfile(p);
+    else return { message: 'no_profile' };
+    return null;
   } catch (e) {
-    // Sin conexión o servidor sin la fase 1: se usa el último perfil guardado
+    // Se sigue con el último perfil guardado
+    return e;
   }
 }
 
@@ -268,8 +272,9 @@ Object.assign(ACTIONS, {
   'acct-readonly': () => { readOnlyChosen = true; applyAccess(); render(); },
   'acct-gate': () => { readOnlyChosen = false; applyAccess(); },
   'acct-refresh': async () => {
-    await refreshProfile();
-    toast(accessState() === 'active' ? 'Tu cuenta está activa' : 'Sigue igual');
+    const err = await refreshProfile();
+    if (err) { toast('No se ha podido comprobar: ' + errorText(err)); return; }
+    toast(accessState() === 'active' ? 'Tu cuenta está activa' : `Sigue igual (${currentUser()?.email || ''}: ${ROLE_NAME[profile?.role] || 'sin perfil'})`);
     if (accessState() === 'active') { render(); maybeOnboard(); }
   },
   'acct-request': () => pushSheet({ type: 'trainer-request' }),
