@@ -132,7 +132,7 @@ export function viewAjustes() {
     <button type="button" class="btn danger" data-act="wipe">Borrar todos los datos</button>
   </section>
 
-  <p class="foot">Fitness ${APP_VERSION} · Datos de productos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (ODbL)</p>`;
+  <p class="foot">Fitness ${APP_VERSION} · Datos de productos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (ODbL) · Dibujo del cuerpo basado en <a href="https://github.com/HichamELBSI/react-native-body-highlighter" target="_blank" rel="noopener">react-native-body-highlighter</a> (MIT)</p>`;
 }
 
 /* ---------- exportar e importar ---------- */

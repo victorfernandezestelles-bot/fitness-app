@@ -89,7 +89,7 @@ export function viewEntreno() {
       </div>
     </div>
     <p class="muted small-text">${sessions} ${sessions === 1 ? 'entrenamiento' : 'entrenamientos'} · ${sets} series efectivas. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>
-    ${sets ? `<div class="wk-map">${bodyPair(weekLevels(vol))}${mapLegend('week')}</div>` : ''}
+    ${sets ? `<div class="wk-map">${bodyPair(weekLevels(vol), '', bodyModel())}${mapLegend('week')}</div>` : ''}
     <div class="vol">${rows}</div>
     <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series semanales, el rango que se suele usar como referencia para ganar músculo. Toca un músculo para ver sus últimas 12 semanas.</p>
   </section>
@@ -120,7 +120,7 @@ export function viewEntreno() {
         return `<li><button type="button" class="wk-tile" data-act="open-workout" data-id="${w.id}" aria-label="${esc(w.name)}, ${dayLabel(w.date)}. ${esc(musclesLabel(lv))}">
           <span class="wk-tile-top"><b>${dt.getDate()}/${dt.getMonth() + 1}</b>${w.end ? '' : '<em class="tag">en curso</em>'}</span>
           <span class="wk-tile-name">${esc(w.name)}</span>
-          ${bodySVG(dominantView(lv), lv)}
+          ${bodySVG(dominantView(lv), lv, '', bodyModel())}
           <span class="wk-tile-foot">${dur != null ? durLabel(dur) : `${workoutStats(w).sets} series`}</span>
         </button></li>`;
       });
@@ -230,7 +230,7 @@ SHEETS.workout = {
         <span class="eyebrow">${w.end ? 'Duración' : 'Tiempo entrenando'}</span>
         <b ${w.end ? '' : `class="live-elapsed" data-start="${w.start}"`}>${w.end ? (dur == null ? '–' : durLabel(dur)) : clockLabel(Date.now() - Date.parse(w.start))}</b>
       </div>
-      ${st.sets ? (w.end ? `<div class="wk-map">${bodyPair(workoutLevels(w))}${mapLegend('session')}</div>` : `<details class="detail compact wk-map" ${s.mapOpen ? 'open' : ''} data-toggle="mapOpen"><summary>Músculos trabajados hasta ahora</summary>${bodyPair(workoutLevels(w))}${mapLegend('session')}</details>`) : ''}
+      ${st.sets ? (w.end ? `<div class="wk-map">${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</div>` : `<details class="detail compact wk-map" ${s.mapOpen ? 'open' : ''} data-toggle="mapOpen"><summary>Músculos trabajados hasta ahora</summary>${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</details>`) : ''}
       <div class="form-grid">
         <label class="field"><span>Nombre</span><input id="wk-name" type="text" value="${esc(w.name)}" data-input="wk-name" autocomplete="off"></label>
         <label class="field"><span>Fecha</span><input id="wk-date" type="date" value="${w.date}" max="${today()}" data-change="wk-date"></label>
@@ -253,6 +253,9 @@ export function tidySupersets(w) {
     if (w.exercises[i - 1]?.ss !== we.ss && w.exercises[i + 1]?.ss !== we.ss) delete we.ss;
   });
 }
+
+// Modelo del dibujo según Ajustes › Tu cuerpo (sin dato, el de hombre)
+export const bodyModel = () => (S.settings.profile?.sex === 'm' ? 'mujer' : 'hombre');
 
 // Leyenda del mapa: en un entreno, principal y secundario; en la semana, por número de series
 export function mapLegend(kind) {
@@ -279,7 +282,7 @@ SHEETS['wk-summary'] = {
         <div><span class="stat-l">Series</span><span class="stat-v">${st.sets}</span></div>
         <div><span class="stat-l">Kg movidos</span><span class="stat-v">${fmt(st.tonnage)}</span></div>
       </div>
-      ${bodyPair(workoutLevels(w), 'big')}
+      ${bodyPair(workoutLevels(w), 'big', bodyModel())}
       ${mapLegend('session')}
       <h3 class="list-title">Series por músculo</h3>
       <div class="rep-muscles">${list.map(([m, v]) => `<span class="rep-m${prim.has(m) ? ' in' : ''}">${MUSCLE_NAME[m]} <b>${fmt(v, 1)}</b></span>`).join('')}</div>

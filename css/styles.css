@@ -34,11 +34,15 @@
   --step-2: 1.5rem;
   --step-3: 2.25rem;
   --step-4: 3.5rem;
-
-  --map-0: #D5DDD9;
-  --map-1: #A8D5BE;
-  --map-2: #5DB28A;
-  --map-3: #1C7652;
+  --map-body: #DDE5E1;
+  --map-0: #CBD5D0;
+  --map-0-hi: #D9E1DD;
+  --map-1: #93C9AD;
+  --map-1-hi: #BFE3D0;
+  --map-2: #3FA372;
+  --map-2-hi: #86CFA9;
+  --map-3: #14694A;
+  --map-3-hi: #36A774;
   --d-kcal: #D9731A;
   --d-steps: #2F6FD6;
   --d-train: #1C9E5B;
@@ -66,10 +70,15 @@
     --danger: #F07468;
     --danger-soft: #3A1A17;
     --danger-ink: #2A0906;
-    --map-0: #2C3532;
-    --map-1: #3F7D60;
-    --map-2: #52B587;
-    --map-3: #86E8B6;
+    --map-body: #262E2C;
+    --map-0: #2E3734;
+    --map-0-hi: #3A4441;
+    --map-1: #245540;
+    --map-1-hi: #3F8A69;
+    --map-2: #2E8D60;
+    --map-2-hi: #62CF9B;
+    --map-3: #36AE76;
+    --map-3-hi: #B4F8D4;
     --d-kcal: #F2994A;
     --d-steps: #6FA3F5;
     --d-train: #4CC98A;
@@ -94,10 +103,15 @@
   --danger: #F07468;
   --danger-soft: #3A1A17;
   --danger-ink: #2A0906;
-  --map-0: #2C3532;
-  --map-1: #3F7D60;
-  --map-2: #52B587;
-  --map-3: #86E8B6;
+  --map-body: #262E2C;
+  --map-0: #2E3734;
+  --map-0-hi: #3A4441;
+  --map-1: #245540;
+  --map-1-hi: #3F8A69;
+  --map-2: #2E8D60;
+  --map-2-hi: #62CF9B;
+  --map-3: #36AE76;
+  --map-3-hi: #B4F8D4;
   --d-kcal: #F2994A;
   --d-steps: #6FA3F5;
   --d-train: #4CC98A;
@@ -909,14 +923,15 @@ figcaption { font-size: var(--step--1); color: var(--muted); text-align: center;
 #aj-cuenta b { word-break: break-all; }
 
 /* ---------- mapa de músculos ---------- */
-.bodymap { display: block; width: 100%; height: auto; max-width: 100%; }
-.bodymap path { stroke: var(--surface); stroke-width: 1.6; stroke-linejoin: round; }
-.bodymap .bm-x { fill: var(--map-0); opacity: 0.7; }
-.bodymap .bm-0 { fill: var(--map-0); }
-.bodymap .bm-1 { fill: var(--map-1); }
-.bodymap .bm-2 { fill: var(--map-2); }
-.bodymap .bm-3 { fill: var(--map-3); }
-.bodymap .bm-line { fill: none; stroke: var(--surface); stroke-width: 1.4; }
+.bodymap { display: block; width: 100%; height: auto; max-width: 100%; --bm-bg: var(--surface); }
+.bodymap .bm-under path { fill: var(--map-body); stroke: var(--map-body); stroke-width: 14; stroke-linejoin: round; }
+.bodymap .bm-over path { stroke: var(--bm-bg); stroke-width: 3; stroke-linejoin: round; }
+.bodymap .bm-0 { fill: url(#bmg0); }
+.bodymap .bm-1 { fill: url(#bmg1); }
+.bodymap .bm-2 { fill: url(#bmg2); }
+.bodymap .bm-3 { fill: url(#bmg3); }
+.bodymap .bm-over .bm-cut { fill: none; stroke-width: 3.5; }
+.bodymap .bm-over .bm-line { fill: none; stroke: var(--bm-bg); stroke-width: 3; stroke-linecap: round; opacity: 0.55; }
 .bm-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 320px; margin: 4px auto 0; }
 .bm-pair figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
 .bm-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; font-size: var(--step--1); color: var(--muted); margin-top: 8px; }
@@ -933,6 +948,6 @@ figcaption { font-size: var(--step--1); color: var(--muted); text-align: center;
 .wk-tile-top b { font-family: var(--font-display); font-weight: 800; font-size: var(--step-0); font-variant-numeric: tabular-nums; }
 .wk-tile-name { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .wk-tile .bodymap { height: 128px; width: auto; justify-self: center; margin: 2px 0; }
-.wk-tile .bodymap path { stroke: var(--sunk); }
+.wk-tile .bodymap { --bm-bg: var(--sunk); }
 .wk-tile-foot { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .wk-tile-top .tag { white-space: nowrap; font-size: 0.6875rem; }
