@@ -125,7 +125,14 @@ async function refreshInbox(p = profile) {
   try { if (inbox) await store.put('sync:inbox', inbox); else await store.del('sync:inbox'); } catch (e) { /* sin almacén */ }
 }
 
+export const coachInbox = () => inbox;
 const notesSeen = () => S.settings.coachSeen || '';
+export const templatesSeen = () => S.settings.coachTplSeen || '';
+export function markTemplatesSeen() {
+  const last = (inbox?.templates || []).map((t) => t.at).sort().pop();
+  if (last && last > templatesSeen() && GUARD.canWrite()) { S.settings.coachTplSeen = last; saveSettings(); }
+}
+const newTemplates = () => (inbox?.templates || []).filter((t) => t.at > templatesSeen());
 const unreadNotes = () => (inbox?.notes || []).filter((n) => (n.updated_at || n.created_at) > notesSeen()).length;
 
 // Aviso en Hoy: propuesta de objetivos pendiente o notas nuevas del entrenador
@@ -135,6 +142,11 @@ export function coachNotice() {
   if (inbox.proposal) return `<div class="notice coach-notice"><p><b>${who}</b> te propone nuevos objetivos.</p><button type="button" class="btn small" data-act="acct-proposal">Ver propuesta</button></div>`;
   const n = unreadNotes();
   if (n) return `<div class="notice coach-notice"><p><b>${who}</b> te ha dejado ${n === 1 ? 'una nota nueva' : `${n} notas nuevas`}.</p><button type="button" class="btn small" data-act="acct-notes">Leer</button></div>`;
+  const t = newTemplates();
+  if (t.length) {
+    const what = t.length > 1 ? `${t.length} plantillas` : t[0].kind === 'plan' ? `un plan del día («${esc(t[0].name)}»)` : `una receta («${esc(t[0].name)}»)`;
+    return `<div class="notice coach-notice"><p><b>${who}</b> ha compartido contigo ${what}.</p><button type="button" class="btn small" data-act="acct-tpls">Ver</button></div>`;
+  }
   return '';
 }
 
@@ -325,6 +337,8 @@ function trainerSection(p) {
     if (inbox?.proposal) html += `<div class="gate-wait"><p>Te ha propuesto nuevos objetivos el ${dateShort(inbox.proposal.created_at.slice(0, 10))}.</p><button type="button" class="link" data-act="acct-proposal">Ver la propuesta</button></div>`;
     const nn = inbox?.notes?.length || 0;
     if (nn) html += `<button type="button" class="btn ghost small" data-act="acct-notes">Notas de tu entrenador (${nn})${unreadNotes() ? ' · nuevas' : ''}</button>`;
+    const nt = inbox?.templates?.length || 0;
+    if (nt) html += `<button type="button" class="btn ghost small" data-act="acct-tpls">Plantillas de tu entrenador (${nt})${newTemplates().length ? ' · nuevas' : ''}</button>`;
   } else {
     html += lastLinkLine().replace('gate-note', 'hint');
   }

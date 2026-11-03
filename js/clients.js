@@ -7,6 +7,7 @@ import { ACTIONS, INPUTS, SHEETS, VIEWS, closeSheets, pushSheet, render, renderS
 import { SYNC_HOOKS, rpc } from './sync.js';
 import { dateNum, errorText, myProfile, refreshProfile } from './account.js';
 import { fichaAfter, fichaHTML, forgetFichas } from './ficha.js';
+import { resetTemplates, setTemplateClients, viewPlantillas } from './plantillas.js';
 
 const data = { list: null, error: '' };
 let loading = false;
@@ -17,6 +18,7 @@ async function load(force = false) {
   loading = true;
   try {
     data.list = await rpc('trainer_clients');
+    setTemplateClients(data.list);
     data.error = '';
     failed = false;
   } catch (e) {
@@ -122,8 +124,16 @@ export function viewClients() {
       ${many ? `<input type="search" class="top-gap" placeholder="Buscar por nombre o correo" value="${esc(S.ui.cq || '')}" data-input="cl-q" aria-label="Buscar clientes">` : ''}
       <div id="cl-list">${clientRows(shown, f)}</div>`;
   }
+  const ctab = isTrainer() ? S.ui.ctab || 'clientes' : 'clientes';
+  const seg = isTrainer() ? `<div class="segmented" role="tablist">
+    ${[['clientes', 'Clientes'], ['plantillas', 'Plantillas']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${ctab === k}" data-act="cl-ctab" data-v="${k}">${l}</button>`).join('')}
+  </div>` : '';
+  if (ctab === 'plantillas') {
+    return `<header class="page-head"><h1>Clientes</h1></header>${seg}${viewPlantillas()}`;
+  }
   return `
   <header class="page-head"><h1>Clientes</h1></header>
+  ${seg}
   ${offNotice(p)}
   ${data.error ? `<div class="notice"><p>${esc(data.error)}</p></div>` : ''}
   ${codeCard(p)}
@@ -205,6 +215,7 @@ Object.assign(ACTIONS, {
       window.scrollTo(0, 0);
     } else pushSheet({ type: 'client', c });
   },
+  'cl-ctab': (el) => { S.ui.ctab = el.dataset.v; render(); },
   'cl-back': () => { S.ui.client = null; render(); window.scrollTo(0, 0); },
   'cl-manage': () => { const c = find(S.ui.client); if (c) pushSheet({ type: 'client', c }); },
   'cl-accept': async (el) => {
@@ -271,7 +282,7 @@ INPUTS['cl-q'] = (el) => {
 };
 
 // Al cambiar de cuenta o borrar los datos, se olvida la lista
-function resetClients() { data.list = null; data.error = ''; failed = false; S.ui.client = null; forgetFichas(); }
+function resetClients() { data.list = null; data.error = ''; failed = false; S.ui.client = null; forgetFichas(); resetTemplates(); }
 SYNC_HOOKS.auth.push(resetClients);
 SAVED.push((key) => { if (key === '!wipe') resetClients(); });
 

@@ -1049,3 +1049,17 @@ body.read-only .fab { display: none; }
 .prop-table thead th { font-size: var(--step--1); color: var(--muted); font-weight: 700; }
 .prop-table tr.changed td:last-child { color: var(--accent); }
 .coach-notice b { font-weight: 800; }
+
+/* ---------- plantillas ---------- */
+.tpl-ed-meal { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.tpl-ed-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tpl-ed-head h3 { font-size: var(--step-0); }
+.tpl-total { margin: 12px 0 4px; }
+.tpl-meal { margin-top: 12px; }
+.tpl-meal h4 { font-size: var(--step-0); margin-bottom: 4px; }
+.tpl-meal h4 .muted { font-weight: 400; font-size: var(--step--1); margin-left: 4px; }
+.tpl-meal ul, .tpl-ings { list-style: none; margin: 0; padding: 0; }
+.tpl-meal li, .tpl-ings li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.tpl-meal li span:first-child, .tpl-ings li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.tpl-meal li .muted, .tpl-ings li .muted { white-space: nowrap; font-size: var(--step--1); }
+.tpl-share { display: grid; gap: 4px; }

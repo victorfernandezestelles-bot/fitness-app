@@ -377,7 +377,9 @@ export function ctxThen(ctx) {
 export function choose(item, then, opts = {}) {
   if (then && then.mode === 'recipe') {
     const f = getFood(item.id);
-    then.recipeSheet.draft.items.push({ foodId: item.id, g: f?.servingG || 100 });
+    // Un plan del día (plantilla del entrenador) también guarda en qué comida va
+    const meal = then.recipeSheet.addMeal;
+    then.recipeSheet.draft.items.push({ foodId: item.id, g: f?.servingG || 100, ...(meal ? { meal } : {}) });
     popTo(then.recipeSheet);
     return;
   }
