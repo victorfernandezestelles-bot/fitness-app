@@ -50,7 +50,20 @@ export async function loadAll() {
 
 export const put = (key, value) => tx('readwrite', (st) => { st.put(value, key); });
 export const del = (key) => tx('readwrite', (st) => { st.delete(key); });
-export const clearAll = () => tx('readwrite', (st) => { st.clear(); });
+export const get = (key) => tx('readonly', (st) => st.get(key));
+// Borra todo; con «keep», se conservan las claves que empiezan por ese prefijo (p. ej. la sesión de la cuenta)
+export function clearAll(keep) {
+  if (!keep) return tx('readwrite', (st) => { st.clear(); });
+  return tx('readwrite', (st) => {
+    const req = st.openCursor();
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return;
+      if (!String(c.key).startsWith(keep)) c.delete();
+      c.continue();
+    };
+  });
+}
 
 export async function putMany(entries) {
   return tx('readwrite', (st) => { for (const [k, v] of entries) st.put(v, k); });

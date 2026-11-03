@@ -162,6 +162,8 @@ function applySnapshot(d) {
 
 /* ---------- guardado ---------- */
 
+// Avisos tras cada guardado (la sincronización se apunta aquí)
+export const SAVED = [];
 const pending = new Map();
 export function persist(key, getter) {
   if (pending.has(key)) clearTimeout(pending.get(key).t);
@@ -174,7 +176,7 @@ function flushKey(key) {
   pending.delete(key);
   const value = p.getter();
   const op = value == null ? store.del(key) : store.put(key, value);
-  op.catch(() => toast('No se ha podido guardar. Comprueba el espacio del teléfono.'));
+  op.then(() => SAVED.forEach((fn) => fn(key)), () => toast('No se ha podido guardar. Comprueba el espacio del teléfono.'));
 }
 export function flushAll() { for (const key of [...pending.keys()]) { clearTimeout(pending.get(key).t); flushKey(key); } }
 export function dropPending() { pending.forEach((p) => clearTimeout(p.t)); pending.clear(); }
@@ -217,9 +219,10 @@ export async function loadState() {
 export async function replaceAll(data) {
   const d = migrate(data, data.schema || data.version || 1);
   dropPending();
-  await store.clearAll();
+  await store.clearAll('sync:'); // la sesión de la cuenta se mantiene
   await store.putMany(toStoreEntries(d));
   applySnapshot(d);
+  SAVED.forEach((fn) => fn('*'));
 }
 
 export async function wipeAll() {
