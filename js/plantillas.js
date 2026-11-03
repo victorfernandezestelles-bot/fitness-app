@@ -102,7 +102,7 @@ SHEETS['tpl-plan'] = {
       ${MEALS.map(([key, label]) => {
         const list = d.items.map((it, i) => [it, i]).filter(([it]) => (it.meal || 'otros') === key);
         return `<div class="tpl-ed-meal">
-          <div class="tpl-ed-head"><h3>${label}</h3><button type="button" class="btn ghost small" data-act="tpl-add" data-meal="${key}">+ Añadir</button></div>
+          <div class="tpl-ed-head"><h3>${label}</h3><button type="button" class="btn ghost small" data-act="tplan-add" data-meal="${key}">+ Añadir</button></div>
           ${list.length ? `<ul class="ingredients">${list.map(([it, i]) => {
             const f = foodIn({ foods: S.foods }, it.foodId);
             return `<li>
@@ -236,7 +236,7 @@ Object.assign(ACTIONS, {
   // Entrenador
   'tpl-new-plan': () => pushSheet({ type: 'tpl-plan', draft: { id: null, name: '', note: '', items: [] } }),
   'tpl-new-recipe': () => pushSheet({ type: 'tpl-recipe-pick' }),
-  'tpl-add': (el, top) => {
+  'tplan-add': (el, top) => {
     keepTyped(top);
     top.addMeal = el.dataset.meal;
     pushSheet({ type: 'picker', mode: 'recipe', recipeSheet: top, q: '' });
