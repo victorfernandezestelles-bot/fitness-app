@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.10.0';
 
 /* ---------- utilidades ---------- */
 
@@ -84,3 +84,5 @@ export async function deliverFile(filename, text, mime) {
 }
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+export const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);

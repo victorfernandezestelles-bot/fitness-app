@@ -1,7 +1,7 @@
 import { MACROS, MICROS, sumNut } from './nutrients.js';
 import { $, APP_VERSION, csvNum, csvText, dateLong, deliverFile, fmt, inputVal, num, plural, restLabel, today } from './util.js';
 import { MEAL_NAME, S, SCHEMA, flushAll, replaceAll, saveSettings, snapshot, wipeAll } from './state.js';
-import { ACTIVITY, dayOf } from './derived.js';
+import { ACTIVITY, dayOf, parseUnit, pluralEs } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, toast } from './ui.js';
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
@@ -154,7 +154,7 @@ export async function exportCsvDiario() {
   const rows = [head.map(csvText).join(';')];
   for (const date of Object.keys(S.days).sort()) {
     for (const e of S.days[date].entries) {
-      rows.push([date, MEAL_NAME[e.meal] || e.meal, e.name, csvNum(e.qty, 2), e.unit === 'rac' ? 'raciones' : 'g',
+      rows.push([date, MEAL_NAME[e.meal] || e.meal, e.name, csvNum(e.qty, 2), e.unit === 'rac' ? 'raciones' : e.unit === 'ud' ? 'a mano' : parseUnit(e.unit) ? `${pluralEs(parseUnit(e.unit).n, 2)} (${csvNum(parseUnit(e.unit).g, 0)} g)` : 'g',
         ...[...MACROS, ...MICROS].map((n) => csvNum(e.n[n.k], n.k === 'kcal' ? 0 : 2))].map(csvText).join(';'));
     }
   }

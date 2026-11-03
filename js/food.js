@@ -1,9 +1,9 @@
 import { BASICS, BASICS_BY_ID, KEYS, MACROS, MICROS, kcalFrom, mult, sumNut } from './nutrients.js';
 import { offProduct, offSearch } from './off.js';
 import { checksumOk, decodeGray, imageDataToGray } from './barcode.js';
-import { $, addDays, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plural, today, uid } from './util.js';
+import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plural, today, uid } from './util.js';
 import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
-import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, qtyLabel, recentItems, recipeTotals } from './derived.js';
+import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, parseUnit, pluralEs, qtyLabel, recentItems, recipeTotals, unitCode } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
 
 /* ---------- vista: Hoy ---------- */
@@ -491,10 +491,20 @@ SHEETS.qty = {
     let unitToggle = '';
     if (it.type === 'food') {
       const f = getFood(it.id);
-      unit = 'g';
-      if (qty == null) qty = f?.servingG || 100;
-      chips = [...new Set([f?.servingG, 50, 100, 150, 200].filter(Boolean))];
-      base = f ? `${fmt(f.per100.kcal)} kcal · P ${fmt(f.per100.p, 1)} · H ${fmt(f.per100.c, 1)} · G ${fmt(f.per100.f, 1)} por 100 g${f.servingG ? ` · ración ${fmt(f.servingG)} g` : ''}` : '';
+      const own = f?.unitG ? unitCode(f.unitG, f.unitName || 'unidad') : null;
+      if (unit !== 'g' && !parseUnit(unit)) unit = own || 'g';
+      const pu = parseUnit(unit);
+      if (qty == null) qty = pu ? 1 : f?.servingG || 100;
+      chips = pu ? [0.5, 1, 2, 3, 4] : [...new Set([f?.servingG, 50, 100, 150, 200].filter(Boolean))];
+      const uCode = pu ? unit : own;
+      if (uCode) {
+        const un = parseUnit(uCode);
+        unitToggle = `<div class="segmented small" role="tablist">
+          <button type="button" role="tab" aria-selected="${!pu}" data-act="qty-unit" data-unit="g">Gramos</button>
+          <button type="button" role="tab" aria-selected="${!!pu}" data-act="qty-unit" data-unit="${esc(uCode)}">${esc(cap(pluralEs(un.n, 2)))} (${fmt(un.g)} g)</button>
+        </div>`;
+      }
+      base = f ? `${fmt(f.per100.kcal)} kcal · P ${fmt(f.per100.p, 1)} · H ${fmt(f.per100.c, 1)} · G ${fmt(f.per100.f, 1)} por 100 g${f.unitG ? ` · 1 ${esc(f.unitName || 'unidad')} = ${fmt(f.unitG)} g` : f.servingG ? ` · ración ${fmt(f.servingG)} g` : ''}` : '';
     } else {
       const r = S.recipes[it.id];
       if (!unit) unit = 'rac';
@@ -518,9 +528,9 @@ SHEETS.qty = {
       ${unitToggle}
       <div class="qty-row">
         <input id="qty-in" type="text" inputmode="decimal" value="${inputVal(qty, 2)}" data-input="qty" aria-label="Cantidad">
-        <span class="qty-unit">${unit === 'rac' ? 'raciones' : 'g'}</span>
+        <span class="qty-unit">${unit === 'rac' ? 'raciones' : parseUnit(unit) ? esc(pluralEs(parseUnit(unit).n, 2)) : 'g'}</span>
       </div>
-      <div class="chips">${chips.map((c) => `<button type="button" class="chip" data-act="qty-chip" data-v="${c}">${fmt(c, 2)}${unit === 'g' ? ' g' : ''}</button>`).join('')}</div>
+      <div class="chips">${chips.map((c) => `<button type="button" class="chip" data-act="qty-chip" data-v="${c}">${c === 0.5 && parseUnit(unit) ? '½' : fmt(c, 2)}${unit === 'g' ? ' g' : ''}</button>`).join('')}</div>
       <div id="qty-prev" class="prev"></div>
       <div class="field"><span>Comida</span>
         <div class="chips">${MEALS.map(([k, l]) => `<button type="button" class="chip${k === meal ? ' on' : ''}" data-act="qty-meal" data-meal="${k}" aria-pressed="${k === meal}">${l}</button>`).join('')}</div>
@@ -549,8 +559,9 @@ export function updateQtyPreview(s) {
   if (!el) return;
   const n = qtyNut(s);
   if (!n) { el.innerHTML = '<p class="muted">No hay datos para calcular.</p>'; return; }
+  const pu = parseUnit(s.unit);
   el.innerHTML = `
-    <div class="prev-kcal"><b>${fmt(n.kcal)}</b> kcal</div>
+    <div class="prev-kcal"><b>${fmt(n.kcal)}</b> kcal${pu ? `<small> · ${fmt((s.qty || 0) * pu.g)} g</small>` : ''}</div>
     <div class="prev-macros">
       <span class="m-p"><i class="dot"></i>P <b>${fmt(n.p, 1)}</b> g</span>
       <span class="m-c"><i class="dot"></i>H <b>${fmt(n.c, 1)}</b> g</span>
@@ -728,6 +739,11 @@ SHEETS.food = {
         <label class="field"><span>Marca</span><input id="ff-brand" type="text" value="${esc(d.brand || '')}" placeholder="Opcional" autocomplete="off"></label>
         <label class="field"><span>Ración habitual</span><span class="input-unit"><input id="ff-serving" type="text" inputmode="decimal" value="${inputVal(d.servingG, 0)}" placeholder="–"><em>g</em></span></label>
       </div>
+      <div class="form-grid">
+        <label class="field"><span>Unidad (opcional)</span><input id="ff-uname" type="text" value="${esc(d.unitName || '')}" placeholder="p. ej. huevo" autocomplete="off" autocapitalize="off"></label>
+        <label class="field"><span>Peso de una</span><span class="input-unit"><input id="ff-ug" type="text" inputmode="decimal" value="${inputVal(d.unitG, 0)}" placeholder="–"><em>g</em></span></label>
+      </div>
+      <p class="hint">Con una unidad podrás apuntar «2 huevos» en vez de gramos.</p>
       <label class="field"><span>Código de barras</span><input id="ff-code" type="text" inputmode="numeric" value="${esc(d.barcode || '')}" placeholder="Opcional" autocomplete="off"></label>
       <div class="nut-box" role="group" aria-labelledby="nut-box-t">
         <p class="nut-box-title" id="nut-box-t">Información nutricional por 100 g</p>
@@ -755,6 +771,8 @@ export function readFoodForm(s) {
     name: $('#ff-name').value.trim(),
     brand: $('#ff-brand').value.trim(),
     servingG: num($('#ff-serving').value),
+    unitName: $('#ff-uname').value.trim().toLowerCase() || null,
+    unitG: num($('#ff-ug').value),
     barcode: $('#ff-code').value.replace(/\D/g, ''),
     per100,
   };
@@ -765,10 +783,14 @@ export function saveFood(s) {
   if (!f.name) { toast('Ponle un nombre.'); $('#ff-name').focus(); return; }
   if (f.per100.kcal == null) { toast('Falta el valor energético o los macros.'); return; }
   if (f.barcode && !checksumOk(f.barcode) && f.barcode.length >= 8) toast('Ojo: el código de barras no parece válido.');
+  if (f.unitG != null && f.unitG <= 0) f.unitG = null;
+  if (f.unitG && !f.unitName) f.unitName = 'unidad';
+  if (!f.unitG) { delete f.unitG; delete f.unitName; }
   // Un básico que no se ha tocado no se copia; si se modifica, se guarda como propio con el mismo id
   const basic = f.id ? BASICS_BY_ID[f.id] : null;
   const unchangedBasic = basic && !S.foods[f.id] && f.name === basic.name && !f.brand && !f.barcode
     && (f.servingG ?? null) === (basic.servingG ?? null)
+    && (f.unitG ?? null) === (basic.unitG ?? null) && (f.unitName ?? null) === (basic.unitName ?? null)
     && KEYS.every((k) => (f.per100[k] ?? null) === (basic.per100[k] ?? null));
   if (!unchangedBasic) {
     if (!f.id) f.id = uid();
@@ -962,12 +984,18 @@ Object.assign(ACTIONS, {
       updateQtyPreview(top);
       return;
   },
-  'qty-unit': async (el, top, act) => {
-      if (top.unit === el.dataset.unit) return;
-      top.unit = el.dataset.unit;
-      top.qty = null;
+  'qty-unit': async (el, top) => {
+      const to = el.dataset.unit;
+      if (top.unit === to) return;
+      // Entre gramos y unidades se convierte la cantidad (2 huevos → 120 g); en recetas se empieza de nuevo
+      const from = parseUnit(top.unit), dest = parseUnit(to);
+      if (top.item.type === 'food' && top.qty) {
+        if (from && to === 'g') top.qty = Math.round(top.qty * from.g);
+        else if (dest && top.unit === 'g') top.qty = Math.max(0.5, Math.round((top.qty / dest.g) * 2) / 2);
+        else top.qty = null;
+      } else top.qty = null;
+      top.unit = to;
       renderSheets();
-      return;
   },
   'qty-meal': async (el, top, act) => {
       top.meal = el.dataset.meal;

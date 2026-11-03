@@ -16,8 +16,10 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 - **Hoy**: calorías y macros del día frente a tus objetivos (distintos en días de entreno y de descanso si quieres), repetir comidas de ayer o copiar las de otro día, macros a mano para platos que no se pueden pesar, pasos, peso y horas de sueño, cinco comidas (las vacías se recogen en una fila), botón flotante «+ Añadir» que elige la comida según la hora, calendario del mes con puntos de cumplimiento (calorías a ±10 %, pasos y entreno), favoritos encima de recientes y la tabla nutricional completa con % del valor de referencia europeo.
 - **Escáner de códigos de barras** con la cámara. Si el producto no está guardado, se busca en [Open Food Facts](https://world.openfoodfacts.org); si tampoco está ahí, se copian los datos de la etiqueta una vez y quedan guardados.
 - **Recetas**: ingredientes con sus gramos, raciones y peso del plato cocinado, para apuntar por raciones o por gramos servidos.
-- **Básicos**: unos 35 alimentos comunes con valores medios orientativos.
+- **Básicos**: unos 40 alimentos comunes con valores medios orientativos, entre ellos huevos por talla (M, L, XL y camperos).
+- **Unidades**: un alimento puede tener una unidad con su peso («1 huevo = 60 g») para apuntar «2 huevos» en vez de gramos.
 - **Entreno**: unos 70 ejercicios con sus músculos principales y secundarios, ejercicios propios, rutinas, registro de series (kg, repeticiones, calentamiento), lo que hiciste la última vez, sugerencias de progresión (doble progresión con rango e incremento por ejercicio), cronómetro de descanso que arranca al marcar una serie, botones − / + en la serie que toca, RIR opcional, notas fijas por ejercicio y notas de la sesión, superseries, cambiar el orden o sustituir un ejercicio (y, si quieres, también en la rutina), ejercicios terminados plegados, pantalla encendida mientras entrenas, historial con 1RM estimado y series semanales por músculo (1 por principal, 0,5 por secundario).
+- **Mapa de músculos**: un cuerpo de frente y de espalda con lo trabajado. Sale al terminar cada entreno (principal y secundario), en cada entreno guardado, en el historial en cuadrícula y en la semana (por número de series).
 - **Cardio y actividades** (pestaña aparte en Entreno): caminata larga, carrera, bici, elíptica, comba, baloncesto, natación, movilidad u otra, con duración, intensidad y, si quieres, distancia y calorías. No suman series por músculo, pero el día cuenta como entrenado.
 - **Historial de series por músculo**: toca un músculo en Entreno para ver sus últimas 12 semanas con la zona de 10 a 20.
 - **Progreso**: informe semanal de lunes a domingo (peso, calorías, pasos, sueño, entrenos, series por músculo y medidas) que se puede copiar como texto, gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos y sueño de las últimas dos semanas y media de calorías.
@@ -50,6 +52,7 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 | `js/nutrients.js`, `js/exercises.js`, `js/templates.js` | Datos de referencia |
 | `js/barcode.js` | Lector de códigos EAN-13 / EAN-8 sin librerías externas |
 | `js/off.js` | Consulta a Open Food Facts |
+| `js/bodymap.js` | Dibujo del cuerpo con los músculos |
 | `js/sync.js` | Cuenta y sincronización con Supabase |
 | `js/config.js` | Dirección y clave pública del servidor |
 | `js/store.js` | Almacén en el teléfono (IndexedDB): datos y, aparte, fotos |

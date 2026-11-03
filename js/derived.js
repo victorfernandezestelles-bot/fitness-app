@@ -45,10 +45,23 @@ export function recipeTotals(r) {
 }
 
 // Nutrientes de un elemento (alimento o receta) para una cantidad y unidad
+/* ---------- unidades («2 huevos») ----------
+   Una entrada por unidades guarda unit = 'u:<gramos de una>:<nombre>', así sigue siendo
+   correcta aunque luego cambie el peso de la unidad del alimento. */
+export const unitCode = (g, n) => `u:${g}:${n}`;
+export function parseUnit(unit) {
+  if (typeof unit !== 'string' || !unit.startsWith('u:')) return null;
+  const i = unit.indexOf(':', 2);
+  const g = Number(unit.slice(2, i));
+  return g > 0 ? { g, n: unit.slice(i + 1) || 'unidad' } : null;
+}
+export const pluralEs = (w, n) => (n === 1 || !w ? w : /[aeiouáéó]$/i.test(w) ? w + 's' : /z$/i.test(w) ? w.slice(0, -1) + 'ces' : w + 'es');
+export const gramsOf = (qty, unit) => { const u = parseUnit(unit); return u ? qty * u.g : qty; };
+
 export function nutFor(item, qty, unit) {
   if (item.type === 'food') {
     const f = getFood(item.id);
-    return f ? scale(f.per100, qty) : null;
+    return f ? scale(f.per100, gramsOf(qty, unit)) : null;
   }
   const r = S.recipes[item.id];
   if (!r) return null;
@@ -62,7 +75,13 @@ export function itemName(item) {
   return S.recipes[item.id]?.name || 'Receta borrada';
 }
 
-export const qtyLabel = (qty, unit) => (unit === 'ud' ? 'a mano' : unit === 'rac' ? `${fmt(qty, 2)} ${qty === 1 ? 'ración' : 'raciones'}` : `${fmt(qty, 0)} g`);
+export function qtyLabel(qty, unit) {
+  if (unit === 'ud') return 'a mano';
+  if (unit === 'rac') return `${fmt(qty, 2)} ${qty === 1 ? 'ración' : 'raciones'}`;
+  const u = parseUnit(unit);
+  if (u) return `${fmt(qty, 2)} ${pluralEs(u.n, qty)} (${fmt(qty * u.g, 0)} g)`;
+  return `${fmt(qty, 0)} g`;
+}
 
 /* ---------- favoritos ---------- */
 export const favKey = (type, id) => `${type}:${id}`;
@@ -79,8 +98,16 @@ export function favItems() {
 }
 
 // Cantidad por defecto al apuntar algo (la misma que propone la hoja de cantidad)
-export const defaultUnit = (it) => (it.type === 'food' ? 'g' : 'rac');
-export const defaultQty = (it) => (it.type === 'food' ? getFood(it.id)?.servingG || 100 : 1);
+export function defaultUnit(it) {
+  if (it.type !== 'food') return 'rac';
+  const f = getFood(it.id);
+  return f?.unitG ? unitCode(f.unitG, f.unitName || 'unidad') : 'g';
+}
+export function defaultQty(it) {
+  if (it.type !== 'food') return 1;
+  const f = getFood(it.id);
+  return f?.unitG ? 1 : f?.servingG || 100;
+}
 
 /* ---------- calendario de cumplimiento ---------- */
 export const dayKcal = (date) => dayOf(date).entries.reduce((a, e) => a + (e.n.kcal || 0), 0);
@@ -445,3 +472,25 @@ export function muscleHistory(m, n = 12) {
   for (let i = 0; i < n; i++) { out.unshift({ mon, v: weekVolume(mon).vol[m] || 0 }); mon = addDays(mon, -7); }
   return out;
 }
+
+/* ---------- mapa de músculos ---------- */
+// Series de un entreno por músculo (1 al principal, 0,5 al secundario) y qué músculos fueron principales
+export function workoutVolume(w) {
+  const vol = {};
+  const prim = new Set();
+  for (const we of w.exercises || []) {
+    const ex = getEx(we.exId);
+    const n = we.sets.filter(isEffective).length;
+    if (!ex || !n) continue;
+    for (const m of ex.primary) { vol[m] = (vol[m] || 0) + n; prim.add(m); }
+    for (const m of ex.secondary) vol[m] = (vol[m] || 0) + n / 2;
+  }
+  return { vol, prim };
+}
+// Entreno: principal = intenso, solo secundario = suave
+export function workoutLevels(w) {
+  const { vol, prim } = workoutVolume(w);
+  return Object.fromEntries(Object.keys(vol).map((m) => [m, prim.has(m) ? 3 : 1]));
+}
+// Semana: según las series (1-4, 5-9, 10 o más)
+export const weekLevels = (vol) => Object.fromEntries(Object.entries(vol).filter(([, v]) => v > 0).map(([m, v]) => [m, v >= 10 ? 3 : v >= 5 ? 2 : 1]));

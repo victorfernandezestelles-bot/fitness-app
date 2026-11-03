@@ -9,7 +9,7 @@ import re, os, collections
 
 JS = os.path.join(os.path.dirname(__file__), '..', 'js')
 APP_MODULES = ['util', 'state', 'derived', 'ui', 'food', 'training', 'progress', 'settings', 'onboarding', 'cardio', 'report', 'photos', 'sync', 'app']
-LIBS = ['nutrients', 'off', 'barcode', 'exercises', 'templates', 'config']
+LIBS = ['nutrients', 'off', 'barcode', 'exercises', 'templates', 'config', 'bodymap']
 LAYER = {'util': 0, 'state': 1, 'derived': 2, 'ui': 3, 'food': 4, 'training': 4, 'progress': 4, 'settings': 4, 'onboarding': 4, 'cardio': 4, 'report': 4, 'photos': 4, 'sync': 4, 'app': 5}
 decl = re.compile(r'^export (?:async function|function|const|let|class) ([A-Za-z_$][\w$]*)', re.M)
 

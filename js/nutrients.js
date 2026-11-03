@@ -86,6 +86,12 @@ const B = [
   ['ternera-picada', 'Carne picada de ternera (cruda, ~15 % grasa)', 18.6, 0, 0, 15, 5.9, 0, 0.17, 18, 2.1, 18, 290, 4.6, 0, 0, 0.1, 2.4, null],
   ['lomo-cerdo', 'Lomo de cerdo (crudo)', 21, 0, 0, 6, 2, 0, 0.13, 6, 0.8, 25, 360, 1.9, 2, 0, 0.5, 0.6, null],
   ['huevo', 'Huevo entero', 12.6, 0.7, 0.4, 9.5, 3.1, 0, 0.36, 56, 1.75, 12, 138, 1.3, 160, 0, 2, 0.9, 55],
+  // Por tallas (Reglamento CE 589/2008, peso con cáscara): M 53-63 g, L 63-73 g, XL desde 73 g.
+  // La parte comestible es ~89 %; por 100 g son iguales, cambia el peso de cada huevo.
+  ['huevo-m', 'Huevo talla M', 12.6, 0.7, 0.4, 9.5, 3.1, 0, 0.36, 56, 1.75, 12, 138, 1.3, 160, 0, 2, 0.9, 52],
+  ['huevo-l', 'Huevo talla L', 12.6, 0.7, 0.4, 9.5, 3.1, 0, 0.36, 56, 1.75, 12, 138, 1.3, 160, 0, 2, 0.9, 60],
+  ['huevo-xl', 'Huevo talla XL', 12.6, 0.7, 0.4, 9.5, 3.1, 0, 0.36, 56, 1.75, 12, 138, 1.3, 160, 0, 2, 0.9, 68],
+  ['huevo-campero', 'Huevo campero (talla L)', 12.6, 0.7, 0.4, 9.5, 3.1, 0, 0.36, 56, 1.75, 12, 138, 1.3, 160, 0, 2, 0.9, 60],
   ['clara', 'Clara de huevo', 10.9, 0.7, 0.7, 0.2, 0, 0, 0.42, 7, 0.1, 11, 163, 0, 0, 0, 0, 0.1, 33],
   ['salmon', 'Salmón (crudo)', 20, 0, 0, 13, 3.1, 0, 0.15, 9, 0.3, 27, 363, 0.4, 58, 0, 11, 3.2, null],
   ['atun', 'Atún al natural (lata, escurrido)', 23, 0, 0, 1, 0.3, 0, 0.8, 10, 1, 25, 230, 0.6, 6, 0, 1.7, 2.5, 56],
@@ -113,12 +119,18 @@ const B = [
 
 const MICRO_KEYS = ['ca', 'fe', 'mg', 'k', 'zn', 'va', 'vc', 'vd', 'b12'];
 
+// Básicos que se apuntan por unidades: [nombre de la unidad, gramos comestibles de una]
+const UNITS = {
+  huevo: ['huevo', 55], 'huevo-m': ['huevo', 52], 'huevo-l': ['huevo', 60], 'huevo-xl': ['huevo', 68], 'huevo-campero': ['huevo', 60],
+};
+
 export const BASICS = B.map((r) => {
   const [id, name, p, c, su, f, sf, fi, sal, ...rest] = r;
   const per100 = { p, c, su, f, sf, fi, sal };
   MICRO_KEYS.forEach((k, i) => { per100[k] = rest[i]; });
   per100.kcal = kcalFrom(per100);
-  return { id: 'b-' + id, name, per100, servingG: rest[9] ?? null, source: 'basico' };
+  const u = UNITS[id];
+  return { id: 'b-' + id, name, per100, servingG: rest[9] ?? null, source: 'basico', ...(u ? { unitName: u[0], unitG: u[1] } : {}) };
 });
 
 export const BASICS_BY_ID = Object.fromEntries(BASICS.map((b) => [b.id, b]));

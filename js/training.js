@@ -1,8 +1,9 @@
 import { EXERCISES_BY_ID, MUSCLES, MUSCLE_NAME, e1rm } from './exercises.js';
 import { TEMPLATES } from './templates.js';
+import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
 import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
-import { allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, lastPerformance, mondayOf, musclesText, nextInRotation, setText, suggestion, weekVolume, workoutDuration, workoutStats, workoutsSorted } from './derived.js';
+import { allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, lastPerformance, mondayOf, musclesText, nextInRotation, setText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
 import { bar } from './food.js';
 import { viewCardio } from './cardio.js';
@@ -88,13 +89,20 @@ export function viewEntreno() {
       </div>
     </div>
     <p class="muted small-text">${sessions} ${sessions === 1 ? 'entrenamiento' : 'entrenamientos'} · ${sets} series efectivas. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>
+    ${sets ? `<div class="wk-map">${bodyPair(weekLevels(vol))}${mapLegend('week')}</div>` : ''}
     <div class="vol">${rows}</div>
     <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series semanales, el rango que se suele usar como referencia para ganar músculo. Toca un músculo para ver sus últimas 12 semanas.</p>
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Últimos entrenamientos</h2></div>
-    ${recent.length ? (() => {
+    <div class="card-head">
+      <h2>Últimos entrenamientos</h2>
+      ${recent.length ? `<div class="segmented small" role="tablist" aria-label="Vista">
+        <button type="button" role="tab" aria-selected="${S.ui.wview !== 'list'}" data-act="wview" data-v="grid">Mapa</button>
+        <button type="button" role="tab" aria-selected="${S.ui.wview === 'list'}" data-act="wview" data-v="list">Lista</button>
+      </div>` : ''}
+    </div>
+    ${recent.length ? (S.ui.wview === 'list' ? (() => {
       const pl = pageList('workouts', recent, 10, (w) => {
         const st = workoutStats(w);
         return `<li><button type="button" class="row" data-act="open-workout" data-id="${w.id}">
@@ -104,7 +112,20 @@ export function viewEntreno() {
       </button></li>`;
       });
       return `<ul class="list">${pl.html}</ul>${pl.more}`;
-    })() : '<p class="empty">Aún no hay entrenamientos. Empieza uno vacío o crea una rutina con tus ejercicios habituales.</p>'}
+    })() : (() => {
+      const pl = pageList('workouts', recent, 12, (w) => {
+        const lv = workoutLevels(w);
+        const dur = workoutDuration(w);
+        const dt = parseISO(w.date);
+        return `<li><button type="button" class="wk-tile" data-act="open-workout" data-id="${w.id}" aria-label="${esc(w.name)}, ${dayLabel(w.date)}. ${esc(musclesLabel(lv))}">
+          <span class="wk-tile-top"><b>${dt.getDate()}/${dt.getMonth() + 1}</b>${w.end ? '' : '<em class="tag">en curso</em>'}</span>
+          <span class="wk-tile-name">${esc(w.name)}</span>
+          ${bodySVG(dominantView(lv), lv)}
+          <span class="wk-tile-foot">${dur != null ? durLabel(dur) : `${workoutStats(w).sets} series`}</span>
+        </button></li>`;
+      });
+      return `<ul class="wk-grid">${pl.html}</ul>${pl.more}`;
+    })()) : '<p class="empty">Aún no hay entrenamientos. Empieza uno vacío o crea una rutina con tus ejercicios habituales.</p>'}
   </section>`;
 }
 
@@ -209,6 +230,7 @@ SHEETS.workout = {
         <span class="eyebrow">${w.end ? 'Duración' : 'Tiempo entrenando'}</span>
         <b ${w.end ? '' : `class="live-elapsed" data-start="${w.start}"`}>${w.end ? (dur == null ? '–' : durLabel(dur)) : clockLabel(Date.now() - Date.parse(w.start))}</b>
       </div>
+      ${st.sets ? (w.end ? `<div class="wk-map">${bodyPair(workoutLevels(w))}${mapLegend('session')}</div>` : `<details class="detail compact wk-map" ${s.mapOpen ? 'open' : ''} data-toggle="mapOpen"><summary>Músculos trabajados hasta ahora</summary>${bodyPair(workoutLevels(w))}${mapLegend('session')}</details>`) : ''}
       <div class="form-grid">
         <label class="field"><span>Nombre</span><input id="wk-name" type="text" value="${esc(w.name)}" data-input="wk-name" autocomplete="off"></label>
         <label class="field"><span>Fecha</span><input id="wk-date" type="date" value="${w.date}" max="${today()}" data-change="wk-date"></label>
@@ -231,6 +253,42 @@ export function tidySupersets(w) {
     if (w.exercises[i - 1]?.ss !== we.ss && w.exercises[i + 1]?.ss !== we.ss) delete we.ss;
   });
 }
+
+// Leyenda del mapa: en un entreno, principal y secundario; en la semana, por número de series
+export function mapLegend(kind) {
+  const items = kind === 'week'
+    ? [[1, '1–4 series'], [2, '5–9'], [3, '10 o más']]
+    : [[3, 'Principal'], [1, 'Secundario']];
+  return `<p class="bm-legend">${items.map(([l, t]) => `<span><i style="background:var(--map-${l})"></i>${t}</span>`).join('')}</p>`;
+}
+
+/* Resumen al terminar un entreno */
+SHEETS['wk-summary'] = {
+  title: () => 'Entreno terminado',
+  render: (s) => {
+    const w = S.workouts[s.id];
+    if (!w) return '';
+    const st = workoutStats(w);
+    const d = workoutDuration(w);
+    const { vol, prim } = workoutVolume(w);
+    const list = Object.entries(vol).sort((a, b) => (prim.has(b[0]) - prim.has(a[0])) || b[1] - a[1]);
+    return `
+      <p class="sheet-sub"><b>${esc(w.name)}</b> · ${dayLabel(w.date)}</p>
+      <div class="stats">
+        <div><span class="stat-l">Duración</span><span class="stat-v">${d != null ? durLabel(d) : '–'}</span></div>
+        <div><span class="stat-l">Series</span><span class="stat-v">${st.sets}</span></div>
+        <div><span class="stat-l">Kg movidos</span><span class="stat-v">${fmt(st.tonnage)}</span></div>
+      </div>
+      ${bodyPair(workoutLevels(w), 'big')}
+      ${mapLegend('session')}
+      <h3 class="list-title">Series por músculo</h3>
+      <div class="rep-muscles">${list.map(([m, v]) => `<span class="rep-m${prim.has(m) ? ' in' : ''}">${MUSCLE_NAME[m]} <b>${fmt(v, 1)}</b></span>`).join('')}</div>
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost" data-act="wk-summary-open">Ver el entreno</button>
+        <button type="button" class="btn primary" data-act="sheet-close">Hecho</button>
+      </div>`;
+  },
+};
 
 // Letra de cada superserie (A, B, C…) por orden de aparición
 function supersetLetters(w) {
@@ -763,8 +821,9 @@ Object.assign(ACTIONS, {
       const wasOpen = !w.end;
       if (wasOpen) w.end = new Date().toISOString();
       saveWorkout(w.id);
+      if (wasOpen && w.exercises.length) { stopRest(); replaceTop({ type: 'wk-summary', id: w.id }); render(); return; }
       closeSheets();
-      if (wasOpen) { const d = workoutDuration(w); toast(`Entrenamiento guardado: ${workoutStats(w).sets} series${d != null ? ` en ${durLabel(d)}` : ''}`); }
+      if (wasOpen) toast('Entrenamiento guardado');
       return;
   },
   'wk-del': async (el, top) => {
@@ -917,6 +976,8 @@ ACTIONS['set-done'] = multi_set_type;
 ACTIONS['set-del'] = multi_set_type;
 
 Object.assign(ACTIONS, {
+  'wview': (el) => { S.ui.wview = el.dataset.v; render(); },
+  'wk-summary-open': (el, top) => replaceTop({ type: 'workout', id: top.id }),
   // Botones − / +: kilos según el incremento del ejercicio y repeticiones de 1 en 1
   'step': (el, top) => {
     const w = S.workouts[top.id];
@@ -1021,3 +1082,10 @@ CHANGES['wk-date'] = (el, top) => {
   const w = S.workouts[top?.id];
   if (w && el.value) { w.date = el.value; saveWorkout(w.id); renderSheets(); }
 };
+
+// Recuerda si un desplegable de una hoja está abierto, para que no se cierre al repintar
+document.addEventListener('toggle', (e) => {
+  const k = e.target?.dataset?.toggle;
+  const top = S.sheets[S.sheets.length - 1];
+  if (k && top) top[k] = e.target.open;
+}, true);

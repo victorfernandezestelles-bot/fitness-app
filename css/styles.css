@@ -35,6 +35,10 @@
   --step-3: 2.25rem;
   --step-4: 3.5rem;
 
+  --map-0: #D5DDD9;
+  --map-1: #A8D5BE;
+  --map-2: #5DB28A;
+  --map-3: #1C7652;
   --d-kcal: #D9731A;
   --d-steps: #2F6FD6;
   --d-train: #1C9E5B;
@@ -62,6 +66,10 @@
     --danger: #F07468;
     --danger-soft: #3A1A17;
     --danger-ink: #2A0906;
+    --map-0: #2C3532;
+    --map-1: #3F7D60;
+    --map-2: #52B587;
+    --map-3: #86E8B6;
     --d-kcal: #F2994A;
     --d-steps: #6FA3F5;
     --d-train: #4CC98A;
@@ -86,6 +94,10 @@
   --danger: #F07468;
   --danger-soft: #3A1A17;
   --danger-ink: #2A0906;
+  --map-0: #2C3532;
+  --map-1: #3F7D60;
+  --map-2: #52B587;
+  --map-3: #86E8B6;
   --d-kcal: #F2994A;
   --d-steps: #6FA3F5;
   --d-train: #4CC98A;
@@ -895,3 +907,32 @@ figcaption { font-size: var(--step--1); color: var(--muted); text-align: center;
 /* ---------- cuenta ---------- */
 .sync-err { color: var(--danger); font-weight: 700; }
 #aj-cuenta b { word-break: break-all; }
+
+/* ---------- mapa de músculos ---------- */
+.bodymap { display: block; width: 100%; height: auto; max-width: 100%; }
+.bodymap path { stroke: var(--surface); stroke-width: 1.6; stroke-linejoin: round; }
+.bodymap .bm-x { fill: var(--map-0); opacity: 0.7; }
+.bodymap .bm-0 { fill: var(--map-0); }
+.bodymap .bm-1 { fill: var(--map-1); }
+.bodymap .bm-2 { fill: var(--map-2); }
+.bodymap .bm-3 { fill: var(--map-3); }
+.bodymap .bm-line { fill: none; stroke: var(--surface); stroke-width: 1.4; }
+.bm-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 320px; margin: 4px auto 0; }
+.bm-pair figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.bm-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; font-size: var(--step--1); color: var(--muted); margin-top: 8px; }
+.bm-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.wk-map { margin: 4px 0 12px; }
+.wk-map summary { cursor: pointer; }
+.bm-pair figure .bodymap { max-height: 220px; }
+.bm-pair.big { max-width: 360px; }
+.bm-pair.big figure .bodymap { max-height: 320px; }
+.card-head .segmented.small { margin: 0; }
+.wk-grid { list-style: none; padding: 0; margin: 4px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wk-tile { width: 100%; display: grid; gap: 4px; justify-items: start; text-align: left; border: 1px solid var(--line); background: var(--sunk); color: var(--ink); border-radius: 12px; padding: 8px 8px 10px; min-width: 0; }
+.wk-tile-top { display: flex; gap: 6px; align-items: center; width: 100%; }
+.wk-tile-top b { font-family: var(--font-display); font-weight: 800; font-size: var(--step-0); font-variant-numeric: tabular-nums; }
+.wk-tile-name { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.wk-tile .bodymap { height: 128px; width: auto; justify-self: center; margin: 2px 0; }
+.wk-tile .bodymap path { stroke: var(--sunk); }
+.wk-tile-foot { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wk-tile-top .tag { white-space: nowrap; font-size: 0.6875rem; }

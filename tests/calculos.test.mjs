@@ -7,8 +7,9 @@ import {
   recipeTotals, nutFor, weekVolume, suggestion, dataEnergy, navyBodyFat, weeklyWeights,
   isTrainDay, goalsFor, workoutDuration, nextInRotation, workoutStats, lastPerformance,
   dayMarks, guessMeal, favItems, weekReport, muscleHistory, mondayOf,
+  parseUnit, unitCode, qtyLabel, pluralEs, defaultUnit, defaultQty,
 } from '../js/derived.js';
-import { kcalFrom, scale, sumNut } from '../js/nutrients.js';
+import { kcalFrom, scale, sumNut, BASICS_BY_ID } from '../js/nutrients.js';
 import { defaultCfg, EXERCISES_BY_ID, e1rm } from '../js/exercises.js';
 import { addDays, today } from '../js/util.js';
 
@@ -264,4 +265,30 @@ test('migración 2 → 3: añade la colección de actividades sin tocar lo demá
   assert.equal(m.weights['2026-10-01'], 100);
   const m2 = migrate({ activities: { x: { date: '2026-10-01', type: 'bici', min: 40 } } }, 2);
   assert.equal(m2.activities.x.id, 'x');
+});
+
+test('unidades: «2 huevos» se calcula por los gramos de cada huevo', () => {
+  reset();
+  const it = { type: 'food', id: 'b-huevo-l' };
+  assert.equal(defaultUnit(it), 'u:60:huevo');
+  assert.equal(defaultQty(it), 1);
+  const dos = nutFor(it, 2, 'u:60:huevo');
+  const gramos = nutFor(it, 120, 'g');
+  near(dos.kcal, gramos.kcal, 0.001);
+  near(dos.p, 15.12, 0.01);
+  assert.deepEqual(parseUnit(unitCode(52, 'huevo')), { g: 52, n: 'huevo' });
+  assert.equal(parseUnit('g'), null);
+  assert.equal(qtyLabel(2, 'u:60:huevo'), '2 huevos (120 g)');
+  assert.equal(qtyLabel(1, 'u:60:huevo'), '1 huevo (60 g)');
+  assert.equal(pluralEs('yogur', 2), 'yogures');
+  assert.equal(pluralEs('nuez', 3), 'nueces');
+  assert.equal(defaultUnit({ type: 'food', id: 'b-arroz' }), 'g');
+});
+
+test('huevos por talla: mismos valores por 100 g, distinto peso por huevo', () => {
+  const ids = ['b-huevo-m', 'b-huevo-l', 'b-huevo-xl', 'b-huevo-campero'];
+  const eggs = ids.map((id) => BASICS_BY_ID[id]);
+  assert.ok(eggs.every(Boolean));
+  assert.deepEqual(eggs.map((e) => e.unitG), [52, 60, 68, 60]);
+  assert.ok(eggs.every((e) => e.per100.kcal === eggs[0].per100.kcal && e.per100.vd === 2));
 });
