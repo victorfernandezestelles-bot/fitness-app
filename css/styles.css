@@ -503,7 +503,8 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
   bottom: 0;
   z-index: 25;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   background: var(--surface);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   -webkit-backdrop-filter: blur(14px);
@@ -951,3 +952,41 @@ figcaption { font-size: var(--step--1); color: var(--muted); text-align: center;
 .wk-tile .bodymap { --bm-bg: var(--sunk); }
 .wk-tile-foot { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .wk-tile-top .tag { white-space: nowrap; font-size: 0.6875rem; }
+
+/* ---------- cuenta: puerta, solo lectura y administración ---------- */
+#gate { position: fixed; inset: 0; z-index: 45; background: var(--bg); overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 32px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 32px) max(16px, env(safe-area-inset-left, 0px)); }
+body.gated { overflow: hidden; }
+.gate-card { max-width: 460px; margin: 0 auto; display: grid; gap: 12px; }
+.gate-card h1 { font-family: var(--font-display); font-weight: 800; font-stretch: 85%; font-size: var(--step-3); line-height: 1.05; }
+.gate-card p { line-height: 1.5; }
+.gate-note { font-size: var(--step--1); color: var(--muted); background: var(--sunk); border-radius: 10px; padding: 8px 10px; }
+.gate-code { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.gate-code input { font-family: ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+.gate-foot { display: grid; gap: 6px; margin-top: 12px; font-size: var(--step--1); color: var(--muted); }
+.danger-link { color: var(--danger) !important; }
+#ro-banner { position: fixed; left: 0; right: 0; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--ink); color: var(--bg); font-size: var(--step--1); font-weight: 700; }
+#ro-banner .btn { background: var(--bg); color: var(--ink); border-color: var(--bg); }
+body.read-only { padding-top: calc(env(safe-area-inset-top, 0px) + 48px); }
+.role-tag { font-size: 0.75rem; font-weight: 800; border-radius: 999px; padding: 3px 10px; background: var(--sunk); color: var(--ink); white-space: nowrap; }
+.role-dev, .role-trainer { background: var(--accent-soft); color: var(--accent); }
+.role-pending { background: var(--danger-soft); color: var(--danger); }
+.acct-name { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; }
+.tag-danger { background: var(--danger-soft) !important; color: var(--danger) !important; }
+.tag-off { opacity: 0.65; }
+.chip small { font-weight: 400; opacity: 0.7; margin-left: 3px; }
+.code-row { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+.code-row .row-side { grid-row: auto; grid-column: auto; justify-self: start; display: flex; gap: 6px; }
+.code-row code, .code-list { font-family: ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.04em; }
+.code-list { font-size: var(--step-0); font-weight: 700; margin: 6px 0; user-select: all; -webkit-user-select: all; }
+.adm-form { margin-top: 12px; }
+.req-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.req { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 6px; }
+.req.pending { border-color: var(--accent); }
+.req-head { display: flex; justify-content: space-between; gap: 10px; }
+.req-msg { white-space: pre-wrap; background: var(--sunk); border-radius: 10px; padding: 8px 10px; }
+.req-done { font-size: var(--step--1); color: var(--muted); }
+.rep-v.small { font-family: var(--font-body); font-weight: 700; font-size: var(--step--1); font-stretch: 100%; word-break: break-word; }
+body.read-only .fab { display: none; }

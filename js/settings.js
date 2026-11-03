@@ -6,7 +6,8 @@ import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, ren
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
 import { exportPhotos, importPhotos } from './photos.js';
-import { syncCard, syncConfigured, syncState } from './sync.js';
+import { syncConfigured, syncState } from './sync.js';
+import { accountCard } from './account.js';
 
 /* ---------- vista: Ajustes ---------- */
 
@@ -30,7 +31,7 @@ export function viewAjustes() {
     ${[...(syncConfigured() ? [['cuenta', 'Cuenta']] : []), ['objetivos', 'Objetivos'], ['cuerpo', 'Tu cuerpo'], ['entreno', 'Entreno'], ['apariencia', 'Apariencia'], ['datos', 'Datos']].map(([k, l]) => `<button type="button" class="chip" data-act="aj-jump" data-k="${k}">${l}</button>`).join('')}
   </nav>
 
-  ${syncCard()}
+  ${accountCard()}
 
   <section class="card" id="aj-objetivos">
     <div class="card-head"><h2>Objetivos diarios</h2></div>

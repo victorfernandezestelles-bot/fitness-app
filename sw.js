@@ -1,7 +1,7 @@
 // Permite abrir la app sin conexión (por ejemplo, en el gimnasio).
 // Los archivos propios se piden primero a la red (así llegan las versiones nuevas) y,
 // si no hay conexión o tarda demasiado, se sirven desde la caché.
-const CACHE = 'fitness-v14';
+const CACHE = 'fitness-v15';
 const SHELL = [
   './',
   'index.html',
@@ -20,6 +20,8 @@ const SHELL = [
   'js/report.js',
   'js/photos.js',
   'js/sync.js',
+  'js/account.js',
+  'js/admin.js',
   'js/bodymap.js',
   'js/bodydata.js',
   'js/config.js',

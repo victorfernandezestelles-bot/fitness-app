@@ -1,7 +1,7 @@
 // Infraestructura de interfaz: avisos, pestañas, hojas superpuestas y registro de eventos.
 // Los módulos de cada sección (comida, entreno, progreso, ajustes) registran aquí sus vistas,
 // hojas y acciones; este módulo no importa ninguno de ellos.
-import { $, esc } from './util.js';
+import { $, esc, today } from './util.js';
 import { S } from './state.js';
 
 export const VIEWS = {};   // pestaña -> { html(), after?() }
@@ -11,6 +11,21 @@ export const INPUTS = {};  // data-input -> (el, top)
 export const CHANGES = {}; // data-change o '#id' -> (el, top)
 export const FORMS = {};   // data-form -> (form, top)
 export const HOOKS = { sheetChange: [], resize: [], visible: [] };
+
+// Solo lectura (cuenta pendiente o bloqueada): solo se permiten las acciones de mirar, exportar y de la cuenta
+export const ACCESS = {
+  readOnly: false,
+  acts: new Set(['goto', 'sheet-close', 'sheet-back', 'sheet-back-or-close', 'more', 'confirm-ok',
+    'day-prev', 'day-next', 'day-today', 'calendar', 'cal-month', 'cal-day', 'cal-today', 'edit-entry', 'lib',
+    'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m',
+    'week-prev', 'week-next', 'wtab', 'wview', 'wk-ex-toggle', 'act-open', 'range', 'report-open', 'report-week', 'report-copy',
+    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'theme', 'text-size', 'aj-jump',
+    'export-json', 'export-csv-diario', 'export-csv-resumen', 'export-csv-entrenos', 'export-csv-actividades', 'export-photos']),
+  inputs: new Set(['libq', 'pickq', 'ex-q', 'admin-q']),
+  forms: new Set(['sync-login', 'acct-code', 'acct-delete']),
+};
+const allowed = (kind, name) => !ACCESS.readOnly || String(name).startsWith('sync-') || String(name).startsWith('acct-') || ACCESS[kind].has(name);
+const readOnlyToast = () => toast('Solo lectura: tu cuenta no está activa.');
 
 /* ---------- avisos (con «Deshacer» opcional) ---------- */
 
@@ -165,20 +180,24 @@ export function initEvents() {
     const el = ev.target.closest('[data-act]');
     if (!el) return;
     const fn = ACTIONS[el.dataset.act];
+    if (fn && !allowed('acts', el.dataset.act)) { readOnlyToast(); return; }
     if (fn) await fn(el, topSheet(), el.dataset.act, ev);
   });
   document.addEventListener('input', (ev) => {
     const fn = INPUTS[ev.target.dataset.input];
+    if (fn && !allowed('inputs', ev.target.dataset.input)) return;
     if (fn) fn(ev.target, topSheet());
   });
   document.addEventListener('change', (ev) => {
     const el = ev.target;
     const fn = CHANGES[el.dataset.change] || CHANGES['#' + el.id];
+    if (fn && ACCESS.readOnly && !String(el.dataset.change || '').startsWith('acct-')) { readOnlyToast(); return; }
     if (fn) fn(el, topSheet());
   });
   document.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const fn = FORMS[ev.target.dataset.form];
+    if (fn && !allowed('forms', ev.target.dataset.form)) { readOnlyToast(); return; }
     if (fn) fn(ev.target, topSheet());
   });
   document.addEventListener('keydown', (ev) => {

@@ -27,6 +27,11 @@ let running = false;
 let again = false;
 let timer = null;
 export const syncState = { status: 'off', at: null, msg: '' };
+// Enganches para la cuenta: al entrar o salir, al empezar cada sincronización, y si se puede subir
+export const SYNC_HOOKS = { auth: [], cycle: [], canPush: () => true };
+export const isLoggedIn = () => !!auth;
+export const currentUser = () => auth?.user || null;
+export const rpc = (name, args = {}) => apiRest('rpc/' + name, { method: 'POST', body: args });
 
 /* ---------- utilidades ---------- */
 
@@ -107,7 +112,7 @@ class SyncError extends Error {
   constructor(msg, code, status) { super(msg); this.code = code; this.status = status; }
 }
 
-async function call(path, { method = 'GET', body, token, prefer } = {}) {
+export async function apiCall(path, { method = 'GET', body, token, prefer } = {}) {
   const headers = { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' };
   if (token) headers.Authorization = 'Bearer ' + token;
   if (prefer) headers.Prefer = prefer;
@@ -159,7 +164,7 @@ async function ensureToken(force = false) {
   if (!auth) throw new SyncError('Sin sesión', 'no_session', 401);
   if (!force && auth.expires_at * 1000 - 60000 > Date.now()) return auth.access_token;
   try {
-    setSession(await call('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: auth.refresh_token } }));
+    setSession(await apiCall('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: auth.refresh_token } }));
     await saveAuth();
   } catch (e) {
     if (e.code !== 'offline' && e.status >= 400 && e.status < 500) {
@@ -171,12 +176,12 @@ async function ensureToken(force = false) {
   return auth.access_token;
 }
 
-async function rest(path, opts = {}) {
+export async function apiRest(path, opts = {}) {
   try {
-    return await call('/rest/v1/' + path, { ...opts, token: await ensureToken() });
+    return await apiCall('/rest/v1/' + path, { ...opts, token: await ensureToken() });
   } catch (e) {
     if (e.status !== 401) throw e;
-    return call('/rest/v1/' + path, { ...opts, token: await ensureToken(true) });
+    return apiCall('/rest/v1/' + path, { ...opts, token: await ensureToken(true) });
   }
 }
 
@@ -186,7 +191,7 @@ async function pullSince(since) {
   for (let offset = 0; ; offset += page) {
     const q = 'kv?select=key,value,v,deleted,updated_at&order=updated_at.asc,key.asc'
       + (since ? '&updated_at=gt.' + encodeURIComponent(since) : '') + `&limit=${page}&offset=${offset}`;
-    const rows = await rest(q);
+    const rows = await apiRest(q);
     out.push(...rows);
     if (rows.length < page) return out;
   }
@@ -194,7 +199,7 @@ async function pullSince(since) {
 
 async function push(ops) {
   for (let i = 0; i < ops.length; i += 200) {
-    await rest('kv?on_conflict=user_id,key', { method: 'POST', body: ops.slice(i, i + 200), prefer: 'resolution=merge-duplicates,return=minimal' });
+    await apiRest('kv?on_conflict=user_id,key', { method: 'POST', body: ops.slice(i, i + 200), prefer: 'resolution=merge-duplicates,return=minimal' });
   }
 }
 
@@ -215,6 +220,8 @@ export async function syncNow({ quiet = true } = {}) {
   setStatus('syncing');
   let changed = 0, sent = 0, tooNew = false;
   try {
+    for (const fn of SYNC_HOOKS.cycle) await fn();
+    if (!auth) return;
     flushAll();
     const first = !lastPull;
     const since = lastPull ? new Date(Date.parse(lastPull) - 10000).toISOString() : null;
@@ -242,15 +249,15 @@ export async function syncNow({ quiet = true } = {}) {
         setShadow(rh); // gana lo de este dispositivo: se sube ahora
       }
     }
-    // Subir lo cambiado aquí
-    const now = rowsOf();
+    // Subir lo cambiado aquí (solo con la cuenta activa)
+    const now = SYNC_HOOKS.canPush() ? rowsOf() : null;
     const ops = [];
     const hashes = {};
-    for (const [key, value] of Object.entries(now)) {
+    for (const [key, value] of Object.entries(now || {})) {
       const h = hash(value);
       if (shadow[key] !== h) { ops.push({ user_id: auth.user.id, key, value, v: SCHEMA, deleted: false }); hashes[key] = h; }
     }
-    for (const key of Object.keys(shadow)) {
+    for (const key of now ? Object.keys(shadow) : []) {
       if (!(key in now)) { ops.push({ user_id: auth.user.id, key, value: null, v: SCHEMA, deleted: true }); hashes[key] = null; }
     }
     if (ops.length) {
@@ -289,7 +296,7 @@ function schedule(ms = 3000) {
   timer = setTimeout(() => syncNow(), ms);
 }
 
-async function signOutLocal() {
+export async function signOutLocal() {
   auth = null;
   shadow = {};
   lastPull = null;
@@ -297,6 +304,7 @@ async function signOutLocal() {
   await store.del('sync:shadow');
   await store.del('sync:last');
   setStatus('off');
+  SYNC_HOOKS.auth.forEach((fn) => fn(false));
 }
 
 export async function initSync() {
@@ -322,7 +330,7 @@ window.addEventListener('online', () => schedule(500));
 
 /* ---------- interfaz ---------- */
 
-function statusText() {
+export function statusText() {
   const s = syncState;
   if (s.status === 'syncing') return 'Sincronizando…';
   if (s.status === 'error' || s.status === 'update') return `<span class="sync-err">${esc(s.msg)}</span>`;
@@ -359,6 +367,7 @@ SHEETS.login = {
     <p class="muted">Usa el mismo correo y contraseña en el iPhone y en el ordenador. Si es la primera vez, pulsa «Crear cuenta».</p>
     <form data-form="sync-login" class="top-gap" novalidate>
       <label class="field"><span>Correo</span><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(s.email || '')}" required></label>
+      <label class="field"><span>Tu nombre <small class="muted">(solo al crear la cuenta)</small></span><input id="lg-name" type="text" autocomplete="name" value="${esc(s.name || '')}" maxlength="60"></label>
       <label class="field"><span>Contraseña</span><input id="lg-pass" type="password" autocomplete="${s.mode === 'signup' ? 'new-password' : 'current-password'}" minlength="6" value="${esc(s.pw || '')}" required></label>
       ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
       <div class="sheet-actions">
@@ -373,6 +382,7 @@ async function doLogin(top, mode) {
   const email = $('#lg-email').value.trim().toLowerCase();
   const password = $('#lg-pass').value;
   top.email = email;
+  top.name = ($('#lg-name')?.value || '').trim();
   top.pw = password; // solo mientras la hoja está abierta, para no tener que volver a escribirla
   top.mode = mode;
   if (!/^\S+@\S+\.\S+$/.test(email)) { top.error = 'Ese correo no parece válido.'; renderSheets(); return; }
@@ -382,14 +392,15 @@ async function doLogin(top, mode) {
   renderSheets();
   try {
     const res = mode === 'signup'
-      ? await call('/auth/v1/signup', { method: 'POST', body: { email, password } })
-      : await call('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
+      ? await apiCall('/auth/v1/signup', { method: 'POST', body: { email, password, data: { name: top.name || '' } } })
+      : await apiCall('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
     if (mode === 'signup' && !res?.access_token) throw new SyncError('Falta confirmar', 'email_not_confirmed', 400);
     shadow = {};
     lastPull = null;
     setSession(res);
     await saveAuth();
     popSheet();
+    for (const fn of SYNC_HOOKS.auth) await fn(true);
     render();
     toast(mode === 'signup' ? 'Cuenta creada' : 'Sesión iniciada');
     await syncNow({ quiet: false });
@@ -412,7 +423,7 @@ Object.assign(ACTIONS, {
     onOk: async () => {
       await syncNow();
       const token = auth?.access_token;
-      if (token) call('/auth/v1/logout', { method: 'POST', token }).catch(() => {});
+      if (token) apiCall('/auth/v1/logout', { method: 'POST', token }).catch(() => {});
       await signOutLocal();
       render();
       toast('Sesión cerrada');

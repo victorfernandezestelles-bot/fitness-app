@@ -164,8 +164,11 @@ function applySnapshot(d) {
 
 // Avisos tras cada guardado (la sincronización se apunta aquí)
 export const SAVED = [];
+// Con la cuenta pendiente o bloqueada no se guarda nada (solo lectura)
+export const GUARD = { canWrite: () => true };
 const pending = new Map();
 export function persist(key, getter) {
+  if (!GUARD.canWrite()) return;
   if (pending.has(key)) clearTimeout(pending.get(key).t);
   const t = setTimeout(() => flushKey(key), 250);
   pending.set(key, { t, getter });

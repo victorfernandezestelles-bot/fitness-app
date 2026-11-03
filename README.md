@@ -25,6 +25,8 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 - **Progreso**: informe semanal de lunes a domingo (peso, calorías, pasos, sueño, entrenos, series por músculo y medidas) que se puede copiar como texto, gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos y sueño de las últimas dos semanas y media de calorías.
 - **Ajustes** agrupados en objetivos, cuerpo, entreno, apariencia y datos. El texto sigue el tamaño del iPhone (o normal o grande) y hay opción de botones más grandes.
 - **Fotos de progreso privadas**: frente, lado y espalda por fecha, guardadas solo en el teléfono, con comparación lado a lado. Tienen su propia copia (.json aparte), porque no van en la copia normal.
+- **Tipos de cuenta**: desarrollador, entrenador, cliente (fase 2), usuario libre y pendiente de activar. Para usar la app hace falta un código de activación (caduca a los 7 días) o, más adelante, un entrenador. Una cuenta pendiente o bloqueada puede entrar, ver sus datos en solo lectura, descargarlos y borrar la cuenta. Desde Ajustes se puede solicitar ser entrenador.
+- **Administración** (solo desarrolladores): usuarios con filtros por tipo, bloquear o cambiar el tipo, generar y anular códigos de activación y aprobar o rechazar solicitudes de entrenador.
 - **Cuenta y sincronización** (Ajustes › Cuenta): entrar con correo y contraseña para tener los mismos datos en todos los dispositivos. Se sincroniza todo menos las fotos y los ajustes de apariencia. Si un día cambia en dos sitios a la vez, se juntan las comidas de ambos.
 - **Copias**: exporta todo a `.json` (para restaurar) o a `.csv` (para Excel, con separador `;` y coma decimal). La app avisa si pasa una semana sin copia.
 - Funciona sin conexión una vez abierta por primera vez (salvo la búsqueda en Open Food Facts).
@@ -54,6 +56,9 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 | `js/off.js` | Consulta a Open Food Facts |
 | `js/bodymap.js` | Dibujo del cuerpo con los músculos (hombre o mujer según Ajustes) |
 | `js/bodydata.js` | Formas del cuerpo (archivo generado) |
+| `js/account.js` | Tipo de cuenta, activación, solo lectura y borrar la cuenta |
+| `js/admin.js` | Pestaña Administración |
+| `supabase/` | SQL del servidor, en orden (ver `supabase/LEEME.md`) |
 | `js/sync.js` | Cuenta y sincronización con Supabase |
 | `js/config.js` | Dirección y clave pública del servidor |
 | `js/store.js` | Almacén en el teléfono (IndexedDB): datos y, aparte, fotos |

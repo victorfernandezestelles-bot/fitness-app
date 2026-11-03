@@ -6,7 +6,9 @@ import { HOOKS, applyTheme, initEvents, render } from './ui.js';
 import { restoreRest } from './training.js';
 import { maybeOnboard } from './onboarding.js';
 import { initSync } from './sync.js';
+import { accessState, initAccount } from './account.js';
 // Cada sección registra sus vistas, hojas y acciones al cargarse
+import './admin.js';
 import './food.js';
 import './progress.js';
 import './settings.js';
@@ -57,8 +59,9 @@ async function boot() {
   applyTheme();
   render();
   restoreRest();
-  maybeOnboard();
-  initSync();
+  await initSync();
+  await initAccount();
+  if (accessState() === 'active') maybeOnboard();
   store.askPersist();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
