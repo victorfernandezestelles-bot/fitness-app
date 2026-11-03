@@ -1037,3 +1037,15 @@ body.read-only .fab { display: none; }
 .fc-set.warm { opacity: 0.7; }
 .fc-set.undone { text-decoration: line-through; opacity: 0.55; }
 .entry.static { cursor: default; }
+
+/* ---------- notas y propuestas ---------- */
+.fc-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.fc-note { width: 100%; text-align: left; font: inherit; color: var(--ink); background: var(--sunk); border: 0; border-radius: 12px;
+  padding: 10px 12px; display: grid; gap: 6px; cursor: pointer; }
+.fc-note:disabled, .fc-note.static { cursor: default; }
+.fc-note-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: var(--step--1); }
+.fc-note-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.prop-table th, .prop-table td { text-align: left; }
+.prop-table thead th { font-size: var(--step--1); color: var(--muted); font-weight: 700; }
+.prop-table tr.changed td:last-child { color: var(--accent); }
+.coach-notice b { font-weight: 800; }

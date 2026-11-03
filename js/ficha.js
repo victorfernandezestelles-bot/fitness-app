@@ -1,19 +1,20 @@
-// Ficha de un cliente (solo lectura): resumen de la semana, diario, entrenos y progreso.
+// Ficha de un cliente (solo lectura): resumen de la semana, diario, entrenos y progreso,
+// más las notas del entrenador y sus propuestas de objetivos (supabase/005-notas-objetivos.sql).
 // Los datos los da el servidor (supabase/004-ficha-cliente.sql) solo si el vínculo está en curso.
 // Para pintar se reutilizan los cálculos de la app: mientras se genera el HTML, S apunta un momento
 // a los datos del cliente y vuelve a los propios al terminar (es síncrono: nada se guarda ni se sincroniza entremedias).
 import { MUSCLE_NAME } from './exercises.js';
 import { bodyPair } from './bodymap.js';
-import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, parseISO, plural, today } from './util.js';
+import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, num, parseISO, plural, today } from './util.js';
 import { MEALS, S } from './state.js';
 import { MEASURES, dayOf, exName, goalsFor, hasTrainGoals, isEffective, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
-import { ACTIONS, SHEETS, pageList, pushSheet, render, toast } from './ui.js';
+import { ACTIONS, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { mapLegend } from './training.js';
 import { drawSeries } from './progress.js';
 import { actName, activitiesSorted } from './cardio.js';
 import { lastFullWeek } from './report.js';
 import { dataFromRows, rpc } from './sync.js';
-import { errorText } from './account.js';
+import { errorText, myProfile } from './account.js';
 
 const cache = {}; // id del vínculo -> { data, at, error, loading }
 const SWAP = ['settings', 'days', 'workouts', 'foods', 'recipes', 'weights', 'exercises', 'routines', 'measures', 'activities'];
@@ -29,7 +30,14 @@ export async function loadFicha(id, force = false) {
   if (c.loading || (!force && (c.data || c.error))) return;
   c.loading = true;
   try {
-    c.data = dataFromRows(await rpc('trainer_client_rows', { p_link: id }));
+    const [rows, notes, props] = await Promise.all([
+      rpc('trainer_client_rows', { p_link: id }),
+      rpc('trainer_notes', { p_link: id }).catch(() => null),
+      rpc('trainer_proposals', { p_link: id }).catch(() => null),
+    ]);
+    c.data = dataFromRows(rows);
+    c.notes = notes;
+    c.props = props;
     c.at = Date.now();
     c.error = '';
   } catch (e) {
@@ -188,7 +196,38 @@ function progreso() {
 
 /* ---------- ficha ---------- */
 
-const TABS = [['resumen', 'Resumen'], ['diario', 'Diario'], ['entrenos', 'Entrenos'], ['progreso', 'Progreso']];
+/* ---------- notas y objetivos ---------- */
+
+const GOAL_FIELDS = [['kcal', 'Calorías', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['f', 'Grasas', 'g'], ['steps', 'Pasos', '']];
+const canWriteCoach = () => ['trainer', 'dev'].includes(myProfile()?.role);
+export const goalsText = (g, keys = GOAL_FIELDS) => keys.filter(([k]) => g?.[k] != null).map(([k, l, u]) => `${fmt(g[k])}${u ? ' ' + u : ''} ${k === 'kcal' ? '' : k === 'steps' ? 'pasos' : l.toLowerCase()}`.trim()).join(' · ');
+
+function notasTab(f) {
+  const props = f.props || [];
+  const last = props[0];
+  const g = S.settings.goals;
+  const notes = f.notes || [];
+  const propLine = !last ? '' : last.status === 'pending'
+    ? `<div class="gate-wait"><p>Propuesta enviada el ${dateShort(last.created_at.slice(0, 10))}: pendiente de que la acepte.</p><p class="muted">${goalsText(last.goals) || '–'}</p>${canWriteCoach() ? '<button type="button" class="link" data-act="fc-prop-cancel">Anular la propuesta</button>' : ''}</div>`
+    : last.status === 'accepted' ? `<p class="hint">Aceptó tu propuesta del ${dateShort(last.created_at.slice(0, 10))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>`
+    : last.status === 'rejected' ? `<p class="hint warn-text">Rechazó tu propuesta del ${dateShort(last.created_at.slice(0, 10))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>` : '';
+  return `
+    <section class="card">
+      <div class="card-head"><h2>Objetivos</h2></div>
+      <p>${goalsText(g) || '<span class="muted">No tiene objetivos puestos.</span>'}</p>
+      ${propLine}
+      ${canWriteCoach() ? `<button type="button" class="btn ghost wide top-gap" data-act="fc-propose">${last?.status === 'pending' ? 'Cambiar la propuesta' : 'Proponer objetivos'}</button>` : ''}
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Notas</h2>${canWriteCoach() ? '<button type="button" class="btn small" data-act="fc-note" data-id="">+ Nueva</button>' : ''}</div>
+      ${f.notes == null ? '<p class="muted">No se han podido cargar las notas.</p>' : notes.length ? `<ul class="fc-notes">${notes.map((n) => `<li><button type="button" class="fc-note" data-act="fc-note" data-id="${n.id}" ${canWriteCoach() ? '' : 'disabled'}>
+          <span class="fc-note-top"><span class="muted">${dateShort(n.created_at.slice(0, 10))}${n.updated_at.slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span><em class="tag ${n.visible ? '' : 'tag-off'}">${n.visible ? 'Visible para el cliente' : 'Privada'}</em></span>
+          <span class="fc-note-body">${esc(n.body)}</span>
+        </button></li>`).join('')}</ul>` : '<p class="muted">Aún no has escrito ninguna nota. Las privadas solo las ves tú; las visibles le aparecen al cliente en su app.</p>'}
+    </section>`;
+}
+
+const TABS = [['resumen', 'Resumen'], ['diario', 'Diario'], ['entrenos', 'Entrenos'], ['progreso', 'Progreso'], ['notas', 'Notas']];
 const SECTIONS = { resumen, diario, entrenos, progreso };
 
 function ago(ms) {
@@ -201,7 +240,7 @@ export function fichaHTML(c) {
   const f = cache[c.link_id] || {};
   const tab = S.ui.ftab || 'resumen';
   let body;
-  if (f.data) body = withData(f.data, SECTIONS[tab] || resumen);
+  if (f.data) body = withData(f.data, tab === 'notas' ? () => notasTab(f) : SECTIONS[tab] || resumen);
   else if (f.error) body = `<div class="notice"><p>${esc(f.error)}</p></div>`;
   else body = '<p class="muted">Cargando sus datos…</p>';
   return `
@@ -257,6 +296,66 @@ SHEETS['fc-workout'] = {
   },
 };
 
+SHEETS['fc-note'] = {
+  title: (s) => (s.id ? 'Editar nota' : 'Nueva nota'),
+  render: (s) => `
+    <label class="field"><span>Nota</span><textarea id="fn-body" rows="6" maxlength="4000" placeholder="p. ej. Le molesta la rodilla izquierda: evitar zancadas.">${esc(s.body || '')}</textarea></label>
+    <label class="check top-gap"><input type="checkbox" id="fn-vis" ${s.visible ? 'checked' : ''}> Visible para el cliente</label>
+    <p class="hint">Si no la marcas, la nota es privada: solo la ves tú.</p>
+    ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+    <div class="sheet-actions">
+      ${s.id ? '<button type="button" class="btn danger ghost" data-act="fc-note-del">Borrar</button>' : ''}
+      <button type="button" class="btn primary" data-act="fc-note-save" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Guardando…' : 'Guardar'}</button>
+    </div>`,
+};
+
+const goalInput = (pre, k, l, u, v) => `<label class="nut-field"><span>${l}</span><span class="input-unit"><input id="${pre}-${k}" type="text" inputmode="numeric" value="${v == null ? '' : inputVal(v, 0)}" placeholder="–" data-input="fp-sum">${u ? `<em>${u}</em>` : ''}</span></label>`;
+const macroKcal = (pre) => {
+  const v = (k) => num(document.getElementById(`${pre}-${k}`)?.value) || 0;
+  return Math.round(v('p') * 4 + v('c') * 4 + v('f') * 9);
+};
+
+SHEETS['fc-propose'] = {
+  title: () => 'Proponer objetivos',
+  render: (s) => {
+    const d = dataOf(s);
+    const g = s.goals || d?.settings.goals || {};
+    const gt = s.goalsTrain || d?.settings.goalsTrain || {};
+    return `
+      <p class="muted">Se le enviará al cliente para que la acepte o la rechace. Si la acepta, sus objetivos pasan a ser estos.</p>
+      <h3 class="list-title">Objetivos diarios</h3>
+      <div class="nut-box">${GOAL_FIELDS.map(([k, l, u]) => goalInput('fp', k, l, u, g[k])).join('')}</div>
+      <p class="hint" id="fp-sum-txt"></p>
+      <details class="top-gap"${Object.values(gt).some((x) => x != null) ? ' open' : ''}><summary>Otros objetivos para los días de entreno (opcional)</summary>
+        <div class="nut-box">${GOAL_FIELDS.slice(0, 4).map(([k, l, u]) => goalInput('fpt', k, l, u, gt[k])).join('')}</div>
+        <p class="hint">Déjalos vacíos si quieres los mismos todos los días.</p>
+      </details>
+      <label class="field top-gap"><span>Mensaje (opcional)</span><textarea id="fp-msg" rows="3" maxlength="1000" placeholder="p. ej. Subimos un poco las calorías para recuperar mejor.">${esc(s.msg || '')}</textarea></label>
+      ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <div class="sheet-actions"><button type="button" class="btn primary" data-act="fc-propose-send" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Enviando…' : 'Enviar propuesta'}</button></div>`;
+  },
+  mount: () => sumHint(),
+};
+
+function sumHint() {
+  const el = document.getElementById('fp-sum-txt');
+  if (!el) return;
+  const k = macroKcal('fp');
+  const goal = num(document.getElementById('fp-kcal')?.value);
+  el.textContent = k ? `Las macros suman ${fmt(k)} kcal${goal ? ` (${goal >= k ? fmt(goal - k) + ' por debajo del objetivo' : fmt(k - goal) + ' por encima del objetivo'})` : ''}.` : '';
+}
+INPUTS['fp-sum'] = () => sumHint();
+
+const readGoals = (pre, fields) => {
+  const out = {};
+  for (const [k] of fields) {
+    const raw = document.getElementById(`${pre}-${k}`)?.value.trim();
+    out[k] = raw ? num(raw) : null;
+    if (raw && (out[k] == null || out[k] < 0)) return null;
+  }
+  return out;
+};
+
 SHEETS['fc-report'] = {
   title: () => 'Informe semanal',
   render: (s) => (dataOf(s) ? withData(dataOf(s), () => SHEETS.report.render(s)) : ''),
@@ -276,4 +375,76 @@ Object.assign(ACTIONS, {
   'fc-day-set': (el) => { S.ui.fdate = el.dataset.v; render(); },
   'fc-wk': (el) => pushSheet({ type: 'fc-workout', link: S.ui.client, id: el.dataset.id }),
   'fc-report': () => pushSheet({ type: 'fc-report', link: S.ui.client, monday: lastFullWeek() }),
+  'fc-note': (el) => {
+    const n = (cache[S.ui.client]?.notes || []).find((x) => String(x.id) === el.dataset.id);
+    pushSheet({ type: 'fc-note', link: S.ui.client, id: n?.id || null, body: n?.body || '', visible: n ? n.visible : false });
+  },
+  'fc-note-save': async (el, top) => {
+    top.body = document.getElementById('fn-body').value;
+    top.visible = document.getElementById('fn-vis').checked;
+    if (!top.body.trim()) { top.error = 'Escribe la nota.'; renderSheets(); return; }
+    top.busy = true; top.error = '';
+    renderSheets();
+    try {
+      await rpc('trainer_note_save', { p_link: top.link, p_id: top.id, p_body: top.body, p_visible: top.visible });
+      cache[top.link].notes = await rpc('trainer_notes', { p_link: top.link });
+      closeSheets();
+      render();
+      toast(top.visible ? 'Nota guardada: la verá el cliente' : 'Nota privada guardada');
+    } catch (e) {
+      top.busy = false; top.error = errorText(e);
+      renderSheets();
+    }
+  },
+  'fc-note-del': (el, top) => pushSheet({
+    type: 'confirm', title: 'Borrar nota', text: 'La nota se borrará para siempre.', ok: 'Borrar', danger: true,
+    onOk: async () => {
+      try {
+        await rpc('trainer_note_delete', { p_link: top.link, p_id: top.id });
+        cache[top.link].notes = await rpc('trainer_notes', { p_link: top.link });
+        closeSheets(); render(); toast('Nota borrada');
+      } catch (e) { toast(errorText(e)); }
+    },
+  }),
+  'fc-propose': () => {
+    const last = (cache[S.ui.client]?.props || [])[0];
+    pushSheet(last?.status === 'pending'
+      ? { type: 'fc-propose', link: S.ui.client, goals: last.goals, goalsTrain: last.goals_train || {}, msg: last.message }
+      : { type: 'fc-propose', link: S.ui.client });
+  },
+  'fc-propose-send': async (el, top) => {
+    const g = readGoals('fp', GOAL_FIELDS);
+    const gt = readGoals('fpt', GOAL_FIELDS.slice(0, 4));
+    top.msg = document.getElementById('fp-msg').value;
+    if (!g || !gt) { top.error = 'Revisa los números: solo cifras, sin negativos.'; renderSheets(); return; }
+    if (!Object.values(g).some((v) => v != null)) { top.error = 'Pon al menos un objetivo.'; renderSheets(); return; }
+    top.goals = g; top.goalsTrain = gt;
+    top.busy = true; top.error = '';
+    renderSheets();
+    try {
+      await rpc('trainer_propose', { p_link: top.link, p_goals: g, p_goals_train: Object.values(gt).some((v) => v != null) ? gt : null, p_message: top.msg });
+      cache[top.link].props = await rpc('trainer_proposals', { p_link: top.link });
+      closeSheets();
+      render();
+      toast('Propuesta enviada');
+    } catch (e) {
+      top.busy = false; top.error = errorText(e);
+      renderSheets();
+    }
+  },
+  'fc-prop-cancel': () => {
+    const id = S.ui.client;
+    const last = (cache[id]?.props || [])[0];
+    if (!last) return;
+    pushSheet({
+      type: 'confirm', title: 'Anular la propuesta', text: 'El cliente dejará de verla.', ok: 'Anular', danger: true,
+      onOk: async () => {
+        try {
+          await rpc('trainer_proposal_cancel', { p_link: id, p_id: last.id });
+          cache[id].props = await rpc('trainer_proposals', { p_link: id });
+          render(); toast('Propuesta anulada');
+        } catch (e) { toast(errorText(e)); }
+      },
+    });
+  },
 });

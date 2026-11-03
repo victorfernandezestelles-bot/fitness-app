@@ -5,7 +5,7 @@ import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num
 import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
 import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, parseUnit, pluralEs, qtyLabel, recentItems, recipeTotals, unitCode } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
-import { linkNotice } from './account.js';
+import { coachNotice, linkNotice } from './account.js';
 
 /* ---------- vista: Hoy ---------- */
 
@@ -81,6 +81,7 @@ export function viewHoy() {
   ${date !== today() ? '<div class="back-today"><button type="button" class="btn ghost small" data-act="day-today">Volver a hoy</button></div>' : ''}
 
   ${linkNotice()}
+  ${coachNotice()}
 
   ${backupDue ? `<div class="notice"><p>Hace más de una semana que no guardas una copia de tus datos.</p><button type="button" class="btn small" data-act="export-json">Guardar copia</button></div>` : ''}
 

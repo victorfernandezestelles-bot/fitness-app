@@ -3,7 +3,7 @@
 // Lo que decide quién puede qué está en el servidor (supabase/002 y 003); aquí solo se refleja.
 import * as store from './store.js';
 import { $, dateShort, esc } from './util.js';
-import { GUARD, S, SAVED, wipeAll } from './state.js';
+import { GUARD, S, SAVED, saveSettings, wipeAll } from './state.js';
 import { ACCESS, ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { maybeOnboard } from './onboarding.js';
 import { SYNC_HOOKS, currentUser, isLoggedIn, rpc, signOutLocal, statusText, syncConfigured, syncNow } from './sync.js';
@@ -11,6 +11,7 @@ import { SYNC_HOOKS, currentUser, isLoggedIn, rpc, signOutLocal, statusText, syn
 export const ROLE_NAME = { dev: 'Desarrollador', trainer: 'Entrenador', client: 'Cliente', free: 'Usuario libre', pending: 'Pendiente de activar' };
 
 let profile = null;      // el último perfil que dio el servidor (se guarda para poder abrir sin conexión)
+let inbox = null;        // notas visibles y propuesta pendiente de su entrenador
 let readOnlyChosen = false;
 let gateEl = null;
 let bannerEl = null;
@@ -66,6 +67,8 @@ const ERRORS = {
   bad_state: 'Ya no está en ese estado. Actualiza la lista.',
   no_clients: 'No tienes clientes pendientes de desvincular.',
   bad_date: 'Elige una fecha posterior a hoy.',
+  bad_goals: 'Revisa los objetivos: pon al menos uno, solo con números.',
+  empty: 'Escribe algo antes de guardar.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
@@ -74,11 +77,10 @@ export function errorText(e) {
 }
 
 // Lo del perfil que se ve en las pestañas (Hoy, Ajustes, Clientes)
-const shown = (p) => JSON.stringify(p ? [p.role, p.name, p.link, p.link_request, p.link_last, p.coaching, p.trainer_code, p.request] : null);
+const shown = (p) => JSON.stringify(p ? [p.role, p.name, p.link, p.link_request, p.link_last, p.coaching, p.trainer_code, p.request, inbox] : null);
 
-async function setProfile(p) {
+async function setProfile(p, was = shown(profile)) {
   const before = accessState();
-  const was = shown(profile);
   profile = p || null;
   try { if (profile) await store.put('sync:profile', profile); else await store.del('sync:profile'); } catch (e) { /* sin almacén */ }
   applyAccess();
@@ -102,13 +104,38 @@ export async function refreshProfile() {
   if (!syncConfigured() || !isLoggedIn()) return null;
   try {
     const p = await rpc('my_profile');
-    if (p) await setProfile(p);
-    else return { message: 'no_profile' };
+    if (!p) return { message: 'no_profile' };
+    // La bandeja va antes que el perfil para que la pantalla se pinte ya con ella
+    const was = shown(profile);
+    await refreshInbox(p);
+    await setProfile(p, was);
     return null;
   } catch (e) {
     // Se sigue con el último perfil guardado
     return e;
   }
+}
+
+async function refreshInbox(p = profile) {
+  let next = null;
+  if (p?.link) {
+    try { next = await rpc('client_inbox'); } catch (e) { next = inbox; } // sin la fase 4 en el servidor, o sin conexión
+  }
+  inbox = next;
+  try { if (inbox) await store.put('sync:inbox', inbox); else await store.del('sync:inbox'); } catch (e) { /* sin almacén */ }
+}
+
+const notesSeen = () => S.settings.coachSeen || '';
+const unreadNotes = () => (inbox?.notes || []).filter((n) => (n.updated_at || n.created_at) > notesSeen()).length;
+
+// Aviso en Hoy: propuesta de objetivos pendiente o notas nuevas del entrenador
+export function coachNotice() {
+  if (!inbox || accessState() !== 'active' || !profile?.link) return '';
+  const who = esc(profile.link.trainer_name || 'Tu entrenador');
+  if (inbox.proposal) return `<div class="notice coach-notice"><p><b>${who}</b> te propone nuevos objetivos.</p><button type="button" class="btn small" data-act="acct-proposal">Ver propuesta</button></div>`;
+  const n = unreadNotes();
+  if (n) return `<div class="notice coach-notice"><p><b>${who}</b> te ha dejado ${n === 1 ? 'una nota nueva' : `${n} notas nuevas`}.</p><button type="button" class="btn small" data-act="acct-notes">Leer</button></div>`;
+  return '';
 }
 
 SYNC_HOOKS.cycle.push(refreshProfile);
@@ -118,11 +145,12 @@ SYNC_HOOKS.auth.push(async (inSession) => {
   else await setProfile(null);
   if (inSession && accessState() === 'active') maybeOnboard();
 });
-SAVED.push((key) => { if (key === '!wipe') { profile = null; readOnlyChosen = false; applyAccess(); } });
+SAVED.push((key) => { if (key === '!wipe') { profile = null; inbox = null; readOnlyChosen = false; applyAccess(); } });
 
 export async function initAccount() {
   if (!syncConfigured()) return;
   try { profile = (await store.get('sync:profile')) || null; } catch (e) { profile = null; }
+  try { inbox = (await store.get('sync:inbox')) || null; } catch (e) { inbox = null; }
   applyAccess();
   refreshProfile();
 }
@@ -294,6 +322,9 @@ function trainerSection(p) {
     html += `<p>Tu entrenador: ${trainerName(l)}${l.since ? ` · desde el ${dateShort(l.since.slice(0, 10))}` : ''}</p>`;
     if (l.status === 'blocked') html += '<p class="hint">Ha pausado tu acceso como cliente.</p>';
     if (l.unlink_at) html += `<p class="hint warn-text">Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>.</p>`;
+    if (inbox?.proposal) html += `<div class="gate-wait"><p>Te ha propuesto nuevos objetivos el ${dateShort(inbox.proposal.created_at.slice(0, 10))}.</p><button type="button" class="link" data-act="acct-proposal">Ver la propuesta</button></div>`;
+    const nn = inbox?.notes?.length || 0;
+    if (nn) html += `<button type="button" class="btn ghost small" data-act="acct-notes">Notas de tu entrenador (${nn})${unreadNotes() ? ' · nuevas' : ''}</button>`;
   } else {
     html += lastLinkLine().replace('gate-note', 'hint');
   }
@@ -307,6 +338,54 @@ function trainerSection(p) {
 }
 
 /* ---------- hojas ---------- */
+
+SHEETS['coach-notes'] = {
+  title: () => 'Notas de tu entrenador',
+  render: () => {
+    const list = inbox?.notes || [];
+    return `
+      <p class="muted">Lo que ${esc(profile?.link?.trainer_name || 'tu entrenador')} ha querido compartir contigo.</p>
+      ${list.length ? `<ul class="fc-notes top-gap">${list.map((n) => `<li><div class="fc-note static">
+        <span class="fc-note-top"><span class="muted">${dateShort(n.created_at.slice(0, 10))}${(n.updated_at || '').slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span></span>
+        <span class="fc-note-body">${esc(n.body)}</span>
+      </div></li>`).join('')}</ul>` : '<p class="empty">No hay notas.</p>'}`;
+  },
+};
+
+const GOAL_ROWS = [['kcal', 'Calorías', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['f', 'Grasas', 'g'], ['steps', 'Pasos', '']];
+const goalCell = (v, u) => (v == null ? '<span class="muted">–</span>' : `${Math.round(v).toLocaleString('es-ES')}${u ? ' ' + u : ''}`);
+
+SHEETS['coach-proposal'] = {
+  title: () => 'Propuesta de objetivos',
+  render: (s) => {
+    const pr = inbox?.proposal;
+    if (!pr) return '<p class="empty">Ya no hay ninguna propuesta pendiente.</p>';
+    const cur = S.settings.goals;
+    const curT = S.settings.goalsTrain;
+    const row = ([k, l, u], now, next) => `<tr${now !== next ? ' class="changed"' : ''}><th scope="row">${l}</th><td>${goalCell(now, u)}</td><td><b>${goalCell(next, u)}</b></td></tr>`;
+    const gt = pr.goals_train;
+    const canAnswer = accessState() === 'active';
+    return `
+      <p><b>${esc(profile?.link?.trainer_name || 'Tu entrenador')}</b> te propone estos objetivos el ${dateShort(pr.created_at.slice(0, 10))}.</p>
+      ${pr.message ? `<p class="req-msg top-gap">${esc(pr.message)}</p>` : ''}
+      <div class="table-wrap"><table class="nut-table prop-table">
+        <thead><tr><th></th><th>Ahora</th><th>Propuesta</th></tr></thead>
+        <tbody>${GOAL_ROWS.map((r) => row(r, cur[r[0]] ?? null, pr.goals?.[r[0]] ?? null)).join('')}</tbody>
+      </table></div>
+      ${gt || Object.values(curT || {}).some((v) => v != null) ? `<h3 class="list-title">Días de entreno</h3>
+      <div class="table-wrap"><table class="nut-table prop-table">
+        <tbody>${GOAL_ROWS.slice(0, 4).map((r) => row(r, curT?.[r[0]] ?? null, gt?.[r[0]] ?? null)).join('')}</tbody>
+      </table></div>
+      ${gt ? '' : '<p class="hint">Si aceptas, tendrás los mismos objetivos todos los días.</p>'}` : ''}
+      ${canAnswer ? `
+      <label class="field top-gap"><span>Respuesta (opcional)</span><textarea id="cp-reply" rows="2" maxlength="1000" placeholder="p. ej. Me cuesta llegar a tanta proteína">${esc(s.reply || '')}</textarea></label>
+      ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost" data-act="acct-prop-answer" data-v="0" ${s.busy ? 'disabled' : ''}>Rechazar</button>
+        <button type="button" class="btn primary" data-act="acct-prop-answer" data-v="1" ${s.busy ? 'disabled' : ''}>Aceptar</button>
+      </div>` : '<p class="hint top-gap">Podrás responder cuando tu acceso a la app esté activo.</p>'}`;
+  },
+};
 
 SHEETS['link-consent'] = {
   title: () => 'Vincular con tu entrenador',
@@ -453,6 +532,39 @@ Object.assign(ACTIONS, {
       try { await setProfile(await rpc('link_cancel')); render(); toast('Solicitud anulada'); } catch (e) { toast(errorText(e)); }
     },
   }),
+  'acct-notes': () => {
+    pushSheet({ type: 'coach-notes' });
+    const last = (inbox?.notes || []).map((n) => n.updated_at || n.created_at).sort().pop();
+    if (last && last > notesSeen() && GUARD.canWrite()) { S.settings.coachSeen = last; saveSettings(); }
+  },
+  'acct-proposal': () => pushSheet({ type: 'coach-proposal' }),
+  'acct-prop-answer': async (el, top) => {
+    const pr = inbox?.proposal;
+    if (!pr) return;
+    const accept = el.dataset.v === '1';
+    top.reply = $('#cp-reply')?.value || '';
+    top.busy = true; top.error = '';
+    renderSheets();
+    try {
+      await rpc('client_proposal_respond', { p_id: pr.id, p_accept: accept, p_reply: top.reply });
+    } catch (e) {
+      top.busy = false; top.error = errorText(e);
+      renderSheets();
+      return;
+    }
+    if (accept) {
+      const g = pr.goals || {};
+      const gt = pr.goals_train || {};
+      S.settings.goals = { ...S.settings.goals, kcal: g.kcal ?? null, p: g.p ?? null, c: g.c ?? null, f: g.f ?? null, steps: g.steps ?? null };
+      S.settings.goalsTrain = { kcal: gt.kcal ?? null, p: gt.p ?? null, c: gt.c ?? null, f: gt.f ?? null };
+      saveSettings();
+    }
+    inbox = { ...inbox, proposal: null };
+    closeSheets();
+    render();
+    toast(accept ? 'Objetivos actualizados' : 'Propuesta rechazada');
+    refreshInbox();
+  },
   'acct-unlink': () => pushSheet({
     type: 'confirm', title: 'Desvincularme', ok: 'Desvincularme', danger: true,
     text: `Dejarás de estar vinculado a ${profile?.link?.trainer_name || 'tu entrenador'} y ya no podrá ver tus datos.${profile?.role === 'client' ? ' Para seguir usando la app necesitarás el código de otro entrenador o un código de activación.' : ''}`,

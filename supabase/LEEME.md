@@ -7,7 +7,8 @@ Archivos SQL para ejecutar en **SQL Editor** de Supabase, en orden. Cada uno se 
 | `001-sincronizacion.sql` | Tabla `kv` con los datos de cada usuario (ya ejecutado) |
 | `002-cuentas.sql` | Fase 1: tipos de cuenta, códigos de activación, solicitudes de entrenador y funciones de administración (ya ejecutado) |
 | `003-entrenadores.sql` | Fase 2: código fijo de cada entrenador, vínculo con sus clientes (solicitar, aceptar, rechazar, pausar, desvincular), plazo de 15 días al dejar de ser entrenador y solicitud de ampliarlo (ya ejecutado) |
-| `004-ficha-cliente.sql` | Fase 3: el entrenador ve, sin poder cambiarlos, el diario, los entrenos, el peso, las medidas y los objetivos de sus clientes |
+| `004-ficha-cliente.sql` | Fase 3: el entrenador ve, sin poder cambiarlos, el diario, los entrenos, el peso, las medidas y los objetivos de sus clientes (ya ejecutado) |
+| `005-notas-objetivos.sql` | Fase 4: notas del entrenador (privadas o visibles para el cliente) y propuestas de objetivos que el cliente acepta o rechaza |
 
 ## Hacer desarrollador una cuenta
 

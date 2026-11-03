@@ -1,7 +1,7 @@
 // Permite abrir la app sin conexión (por ejemplo, en el gimnasio).
 // Los archivos propios se piden primero a la red (así llegan las versiones nuevas) y,
 // si no hay conexión o tarda demasiado, se sirven desde la caché.
-const CACHE = 'fitness-v18';
+const CACHE = 'fitness-v19';
 const SHELL = [
   './',
   'index.html',
