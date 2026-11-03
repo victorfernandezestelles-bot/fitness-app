@@ -113,7 +113,7 @@ export function viewHoy() {
     <label class="quick-field">
       <span>Pasos</span>
       <input id="steps-in" type="text" inputmode="numeric" enterkeyhint="done" placeholder="0" value="${day.steps == null ? '' : day.steps}" data-change="steps">
-      ${g.steps ? `<small>de ${fmt(g.steps)}</small>` : ''}
+      ${g.steps ? `<small class="goal">de ${fmt(g.steps)}</small>` : ''}
     </label>
     <label class="quick-field">
       <span>Peso</span>

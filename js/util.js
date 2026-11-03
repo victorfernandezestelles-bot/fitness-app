@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.1';
+export const APP_VERSION = '0.18.2';
 
 /* ---------- utilidades ---------- */
 

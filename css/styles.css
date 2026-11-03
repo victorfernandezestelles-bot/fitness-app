@@ -290,6 +290,8 @@ input, select { font: inherit; font-size: max(16px, 1rem); color: var(--ink); }
 .quick-field input[type="text"]:focus { outline: none; box-shadow: none; }
 .quick-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .quick-field small { color: var(--muted); }
+/* El objetivo de pasos va debajo para que quepa el número entero */
+.quick-field small.goal { grid-column: 1 / -1; font-size: var(--step--1); margin-top: -2px; }
 
 /* ---------- comidas ---------- */
 .meal { margin-top: 18px; }
