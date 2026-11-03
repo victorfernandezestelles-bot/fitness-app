@@ -69,10 +69,12 @@ const ERRORS = {
   bad_date: 'Elige una fecha posterior a hoy.',
   bad_goals: 'Revisa los objetivos: pon al menos uno, solo con números.',
   empty: 'Escribe algo antes de guardar.',
+  violates_check: 'Esa foto no se puede compartir (formato o tamaño).',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
-  const key = Object.keys(ERRORS).find((k) => String(e?.message || '').includes(k));
+  const msg = String(e?.message || '').replace('violates check constraint', 'violates_check');
+  const key = Object.keys(ERRORS).find((k) => msg.includes(k));
   return key ? ERRORS[key] : 'No se ha podido completar (' + (e?.message || 'error') + ').';
 }
 

@@ -8,7 +8,7 @@ import { bodyPair } from './bodymap.js';
 import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, num, parseISO, plural, today } from './util.js';
 import { MEALS, S } from './state.js';
 import { MEASURES, dayOf, exName, goalsFor, hasTrainGoals, isEffective, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
-import { ACTIONS, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
+import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { mapLegend } from './training.js';
 import { drawSeries } from './progress.js';
 import { actName, activitiesSorted } from './cardio.js';
@@ -30,14 +30,16 @@ export async function loadFicha(id, force = false) {
   if (c.loading || (!force && (c.data || c.error))) return;
   c.loading = true;
   try {
-    const [rows, notes, props] = await Promise.all([
+    const [rows, notes, props, photos] = await Promise.all([
       rpc('trainer_client_rows', { p_link: id }),
       rpc('trainer_notes', { p_link: id }).catch(() => null),
       rpc('trainer_proposals', { p_link: id }).catch(() => null),
+      rpc('trainer_photos', { p_link: id }).catch(() => []),
     ]);
     c.data = dataFromRows(rows);
     c.notes = notes;
     c.props = props;
+    c.photos = photoSessions(photos);
     c.at = Date.now();
     c.error = '';
   } catch (e) {
@@ -191,8 +193,94 @@ function progreso() {
     <section class="card">
       <div class="card-head"><h2>Medidas</h2></div>
       ${rows.length ? `<div class="rep">${rows.join('')}</div>` : '<p class="muted">No ha registrado medidas.</p>'}
+    </section>
+    ${photosCard()}`;
+}
+
+/* ---------- fotos compartidas ---------- */
+
+const POSE_L = { frente: 'Frente', lado: 'Lado', espalda: 'Espalda' };
+const POSE_ORDER = ['frente', 'lado', 'espalda'];
+
+// Filas por pose → sesiones { set, date, poses: { pose: { id, thumb } } }, de la más reciente a la más antigua
+function photoSessions(rows) {
+  const by = new Map();
+  for (const r of rows || []) {
+    if (!by.has(r.set_id)) by.set(r.set_id, { set: r.set_id, date: r.date, poses: {} });
+    by.get(r.set_id).poses[r.pose] = { id: r.id, thumb: r.thumb };
+  }
+  return [...by.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function photosCard() {
+  const list = cache[S.ui.client]?.photos || [];
+  return `
+    <section class="card">
+      <div class="card-head"><h2>Fotos</h2>${list.length ? `<span class="muted">${plural(list.length, 'sesión', 'sesiones')}</span>` : ''}</div>
+      ${list.length ? `<ul class="list">${list.map((x) => `<li><button type="button" class="row ph-item" data-act="fc-photos" data-set="${esc(x.set)}">
+          <span class="row-main">${dateLong(x.date)}</span>
+          <span class="row-sub">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => POSE_L[p]).join(', ')}</span>
+          <span class="ph-mini">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<img src="${x.poses[p].thumb}" alt="">`).join('')}</span>
+        </button></li>`).join('')}</ul>
+        ${list.length >= 2 ? '<button type="button" class="btn ghost wide top-gap" data-act="fc-ph-compare">Comparar dos fechas</button>' : ''}`
+      : '<p class="muted">No ha compartido fotos contigo. Las fotos son privadas: cada cliente decide qué sesiones comparte.</p>'}
     </section>`;
 }
+
+const fullCache = new Map();
+async function fullPhoto(link, id) {
+  if (!fullCache.has(id)) fullCache.set(id, await rpc('trainer_photo', { p_link: link, p_id: id }));
+  return fullCache.get(id);
+}
+const sessionOf = (s, set) => (cache[s.link]?.photos || []).find((x) => x.set === set);
+
+SHEETS['fc-photos'] = {
+  title: (s) => { const x = sessionOf(s, s.set); return x ? dateLong(x.date) : 'Fotos'; },
+  render: (s) => {
+    const x = sessionOf(s, s.set);
+    if (!x) return '<p class="empty">Ya no comparte estas fotos.</p>';
+    return `<div class="ph-full">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<figure><img id="fcf-${p}" src="${x.poses[p].thumb}" alt="${POSE_L[p]}"><figcaption>${POSE_L[p]}</figcaption></figure>`).join('')}</div>`;
+  },
+  mount: async (s) => {
+    const x = sessionOf(s, s.set);
+    if (!x) return;
+    for (const p of POSE_ORDER.filter((q) => x.poses[q])) {
+      try { const src = await fullPhoto(s.link, x.poses[p].id); const el = document.getElementById('fcf-' + p); if (el && src) el.src = src; } catch (e) { /* se queda la miniatura */ }
+    }
+  },
+};
+
+SHEETS['fc-ph-compare'] = {
+  title: () => 'Comparar',
+  render: (s) => {
+    const list = (cache[s.link]?.photos || []).filter((x) => x.poses[s.pose]);
+    const opts = (sel) => list.map((x) => `<option value="${esc(x.set)}" ${x.set === sel ? 'selected' : ''}>${dateShort(x.date)}</option>`).join('');
+    const pick = (k) => list.find((x) => x.set === s[k]);
+    return `
+      <div class="chips" role="group" aria-label="Pose">${POSE_ORDER.map((p) => `<button type="button" class="chip${s.pose === p ? ' on' : ''}" data-act="fc-ph-pose" data-v="${p}" aria-pressed="${s.pose === p}">${POSE_L[p]}</button>`).join('')}</div>
+      <div class="ph-compare top-gap">
+        ${['a', 'b'].map((k) => { const x = pick(k); return `<figure>
+          <select data-change="fc-ph-which" data-k="${k}" aria-label="Fecha">${opts(s[k])}</select>
+          ${x ? `<img id="fcc-${k}" src="${x.poses[s.pose].thumb}" alt="${POSE_L[s.pose]}, ${dateShort(x.date)}">` : '<p class="muted">Sin foto de esta pose.</p>'}
+        </figure>`; }).join('')}
+      </div>`;
+  },
+  mount: async (s) => {
+    for (const k of ['a', 'b']) {
+      const x = (cache[s.link]?.photos || []).find((y) => y.set === s[k]);
+      if (!x?.poses[s.pose]) continue;
+      try { const src = await fullPhoto(s.link, x.poses[s.pose].id); const el = document.getElementById('fcc-' + k); if (el && src) el.src = src; } catch (e) { /* miniatura */ }
+    }
+  },
+};
+
+// La más antigua y la más reciente con esa pose
+function photoPair(link, pose) {
+  const list = (cache[link]?.photos || []).filter((x) => x.poses[pose]);
+  return { a: list[list.length - 1]?.set, b: list[0]?.set };
+}
+
+CHANGES['fc-ph-which'] = (el, top) => { if (top?.type === 'fc-ph-compare') { top[el.dataset.k] = el.value; renderSheets(); } };
 
 /* ---------- ficha ---------- */
 
@@ -374,6 +462,12 @@ Object.assign(ACTIONS, {
   },
   'fc-day-set': (el) => { S.ui.fdate = el.dataset.v; render(); },
   'fc-wk': (el) => pushSheet({ type: 'fc-workout', link: S.ui.client, id: el.dataset.id }),
+  'fc-photos': (el) => pushSheet({ type: 'fc-photos', link: S.ui.client, set: el.dataset.set }),
+  'fc-ph-compare': () => {
+    const pose = 'frente';
+    pushSheet({ type: 'fc-ph-compare', link: S.ui.client, pose, ...photoPair(S.ui.client, pose) });
+  },
+  'fc-ph-pose': (el, top) => { top.pose = el.dataset.v; Object.assign(top, photoPair(top.link, top.pose)); renderSheets(); },
   'fc-report': () => pushSheet({ type: 'fc-report', link: S.ui.client, monday: lastFullWeek() }),
   'fc-note': (el) => {
     const n = (cache[S.ui.client]?.notes || []).find((x) => String(x.id) === el.dataset.id);

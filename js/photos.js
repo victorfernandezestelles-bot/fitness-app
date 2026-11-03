@@ -1,8 +1,11 @@
-// Fotos de progreso privadas: se guardan solo en el teléfono, aparte de los datos y de su copia .json
+// Fotos de progreso privadas: se guardan solo en el teléfono, aparte de los datos y de su copia .json.
+// Si hay entrenador, el usuario puede compartir sesiones concretas (supabase/007-fotos.sql): solo esas se suben.
 import * as store from './store.js';
-import { $, addDays, dateLong, dateShort, deliverFile, fmt, parseISO, plural, today, uid } from './util.js';
+import { $, addDays, dateLong, dateShort, deliverFile, esc, fmt, parseISO, plural, today, uid } from './util.js';
 import { S } from './state.js';
 import { ACTIONS, CHANGES, SHEETS, popSheet, popTo, pushSheet, render, renderSheets, toast } from './ui.js';
+import { rpc } from './sync.js';
+import { accessState, errorText, myProfile } from './account.js';
 
 export const POSES = [['frente', 'Frente'], ['lado', 'Lado'], ['espalda', 'Espalda']];
 const POSE_NAME = Object.fromEntries(POSES);
@@ -106,7 +109,7 @@ SHEETS.photos = {
     return `
       ${list.length >= 2 ? '<button type="button" class="btn wide" data-act="ph-compare">Comparar dos fechas</button>' : ''}
       <ul class="list top-gap">${list.map((x) => `<li><button type="button" class="row ph-item" data-act="ph-open" data-id="${x.id}">
-        <span class="row-main">${dateLong(x.date)}</span>
+        <span class="row-main">${dateLong(x.date)}${x.shared ? ' <em class="tag">compartida</em>' : ''}</span>
         <span class="row-sub">${x.poses.map((p) => POSE_NAME[p]).join(', ')}</span>
         <span class="ph-mini">${x.poses.map((p) => `<img src="${x.thumbs[p]}" alt="">`).join('')}</span>
       </button></li>`).join('')}</ul>
@@ -117,7 +120,8 @@ SHEETS.photos = {
 SHEETS['photo-set'] = {
   title: (s) => dateLong(s.set.date),
   render: (s) => `
-    <div class="ph-full">${s.set.poses.map((p) => `<figure><img id="phf-${p}" src="${s.set.thumbs[p]}" alt="${POSE_NAME[p]}, ${dateShort(s.set.date)}"><figcaption>${POSE_NAME[p]}</figcaption></figure>`).join('')}</div>
+    ${shareBox(s)}
+    <div class="ph-full top-gap">${s.set.poses.map((p) => `<figure><img id="phf-${p}" src="${s.set.thumbs[p]}" alt="${POSE_NAME[p]}, ${dateShort(s.set.date)}"><figcaption>${POSE_NAME[p]}</figcaption></figure>`).join('')}</div>
     <div class="sheet-actions"><button type="button" class="btn danger ghost" data-act="ph-del">Borrar estas fotos</button></div>`,
   mount: async (s) => {
     for (const p of s.set.poses) {
@@ -155,6 +159,38 @@ SHEETS['photo-compare'] = {
     }
   },
 };
+
+/* ---------- compartir con el entrenador ---------- */
+const coach = () => myProfile()?.link;
+const canShare = () => accessState() === 'active' && coach()?.status === 'active';
+
+function shareBox(s) {
+  const who = esc(coach()?.trainer_name || 'tu entrenador');
+  if (s.busy) return `<p class="muted">${s.busy}</p>`;
+  if (s.set.shared) {
+    return `<div class="gate-wait"><p>Compartidas con <b>${who}</b>. Solo las ve tu entrenador mientras sigáis vinculados.</p>
+      <button type="button" class="link" data-act="ph-unshare">Dejar de compartir</button></div>`;
+  }
+  if (!canShare()) return '';
+  return `<button type="button" class="btn ghost wide" data-act="ph-share">Compartir con ${who}</button>
+    <p class="hint">Se suben solo las fotos de esta sesión. Puedes dejar de compartirlas cuando quieras, y se borran del servidor si os desvinculáis.</p>`;
+}
+
+async function saveSet(set) {
+  try { await store.photoPut('set:' + set.id, { id: set.id, date: set.date, poses: set.poses, thumbs: set.thumbs, at: set.at || null, shared: !!set.shared }); } catch (e) { /* sin almacén */ }
+}
+
+// El servidor manda: si el vínculo terminó, ya no hay nada compartido
+async function syncShared() {
+  if (!sets?.length) return;
+  try {
+    // Sin entrenador no queda nada compartido: el servidor las borra al terminar el vínculo
+    const ids = new Set(coach() ? await rpc('client_photo_shared') : []);
+    for (const x of sets) {
+      if (!!x.shared !== ids.has(x.id)) { x.shared = ids.has(x.id); await saveSet(x); }
+    }
+  } catch (e) { /* sin conexión o sin la fase 6 en el servidor */ }
+}
 
 // Peso apuntado ese día o el más cercano dentro de 3 días
 function weightNear(date) {
@@ -196,13 +232,41 @@ Object.assign(ACTIONS, {
     fillPhotoCard();
     toast(plural(poses.length, 'foto guardada', 'fotos guardadas'));
   },
-  'ph-list': async () => { await loadPhotoSets(); pushSheet({ type: 'photos' }); },
+  'ph-list': async () => { await loadPhotoSets(); pushSheet({ type: 'photos' }); await syncShared(); renderSheets(); },
+  'ph-share': async (el, top) => {
+    const set = top.set;
+    top.busy = 'Subiendo las fotos…';
+    renderSheets();
+    try {
+      for (const p of set.poses) {
+        await rpc('client_photo_share', { p_set: set.id, p_date: set.date, p_pose: p, p_thumb: set.thumbs[p], p_image: await photo(set.id, p) });
+      }
+      set.shared = true;
+      await saveSet(set);
+      toast(`Compartidas con ${coach()?.trainer_name || 'tu entrenador'}`);
+    } catch (e) {
+      try { await rpc('client_photo_unshare', { p_set: set.id }); } catch (e2) { /* nada */ }
+      toast(errorText(e));
+    }
+    top.busy = '';
+    renderSheets();
+  },
+  'ph-unshare': async (el, top) => {
+    try {
+      await rpc('client_photo_unshare', { p_set: top.set.id });
+      top.set.shared = false;
+      await saveSet(top.set);
+      renderSheets();
+      toast('Ya no se comparten');
+    } catch (e) { toast(errorText(e)); }
+  },
   'ph-open': (el) => { const set = sets.find((x) => x.id === el.dataset.id); if (set) pushSheet({ type: 'photo-set', set }); },
   'ph-del': (el, top) => {
     const set = top.set;
     pushSheet({
-      type: 'confirm', title: 'Borrar fotos', text: `Se borrarán las fotos del ${dateLong(set.date)}. Si no tienes una copia de las fotos, no se podrán recuperar.`, ok: 'Borrar', danger: true,
+      type: 'confirm', title: 'Borrar fotos', text: `Se borrarán las fotos del ${dateLong(set.date)}${set.shared ? ', también las que compartiste con tu entrenador' : ''}. Si no tienes una copia de las fotos, no se podrán recuperar.`, ok: 'Borrar', danger: true,
       onOk: async () => {
+        if (set.shared) { try { await rpc('client_photo_unshare', { p_set: set.id }); } catch (e) { toast('No se han podido borrar del servidor: ' + errorText(e)); return; } }
         await store.photoDel(['set:' + set.id, ...set.poses.map((p) => `img:${set.id}:${p}`)]);
         set.poses.forEach((p) => imgCache.delete(`img:${set.id}:${p}`));
         await loadPhotoSets(true);
