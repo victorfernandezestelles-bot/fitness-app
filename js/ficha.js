@@ -15,6 +15,7 @@ import { actName, activitiesSorted } from './cardio.js';
 import { lastFullWeek } from './report.js';
 import { dataFromRows, rpc } from './sync.js';
 import { errorText, myProfile } from './account.js';
+import { drawExProgress, exProgressCard } from './exprogress.js';
 
 const cache = {}; // id del vínculo -> { data, at, error, loading }
 const SWAP = ['settings', 'days', 'workouts', 'foods', 'recipes', 'weights', 'exercises', 'routines', 'measures', 'activities'];
@@ -194,6 +195,7 @@ function progreso() {
       <div class="card-head"><h2>Medidas</h2></div>
       ${rows.length ? `<div class="rep">${rows.join('')}</div>` : '<p class="muted">No ha registrado medidas.</p>'}
     </section>
+    ${exProgressCard('ficha-' + S.ui.client)}
     ${photosCard()}`;
 }
 
@@ -346,7 +348,7 @@ export function fichaHTML(c) {
 }
 
 export function fichaAfter() {
-  if ((S.ui.ftab || 'resumen') === 'progreso') drawSeries(document.getElementById('fc-weight'), weightPts, 'kg', 1);
+  if ((S.ui.ftab || 'resumen') === 'progreso') { drawSeries(document.getElementById('fc-weight'), weightPts, 'kg', 1); drawExProgress('ficha-' + S.ui.client); }
 }
 
 /* ---------- hojas ---------- */

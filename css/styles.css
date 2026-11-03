@@ -20,6 +20,7 @@
   --prot: #D6455E;
   --carb: #C98A06;
   --fat: #4C67E0;
+  --s1: #1C7652; --s2: #4C67E0; --s3: #B07A05; --s4: #B5408F; /* series de las gráficas de ejercicios */
   --danger: #B42318;
   --danger-soft: #FCE8E6;
   --danger-ink: #FFFFFF;
@@ -56,6 +57,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0E1311;
     --surface: #161C19;
+    --s1: #3DA676; --s2: #6F87EC; --s3: #B88420; --s4: #CF68AE;
     --sunk: #1D2521;
     --ink: #E6EDE9;
     --muted: #95A29B;
@@ -89,6 +91,7 @@
 :root[data-theme="dark"] {
   --bg: #0E1311;
   --surface: #161C19;
+  --s1: #3DA676; --s2: #6F87EC; --s3: #B88420; --s4: #CF68AE;
   --sunk: #1D2521;
   --ink: #E6EDE9;
   --muted: #95A29B;
@@ -1065,3 +1068,31 @@ body.read-only .fab { display: none; }
 .tpl-meal li span:first-child, .tpl-ings li span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .tpl-meal li .muted, .tpl-ings li .muted { white-space: nowrap; font-size: var(--step--1); }
 .tpl-share { display: grid; gap: 4px; }
+
+/* ---------- progreso en los ejercicios ---------- */
+.exp-lead { margin-top: 0; }
+.exp-ex { margin-top: 8px; }
+.exp-opts { display: grid; gap: 8px; margin: 10px 0 6px; min-width: 0; }
+.fc-body > * { min-width: 0; }
+.exp-val { white-space: nowrap; }
+.exp-opts .segmented { overflow-x: auto; }
+.exp-opts .segmented button { white-space: nowrap; }
+.exp-pct { font-size: var(--step--1); }
+.exp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; background: var(--muted); }
+.exp-dot.s1, .exp-pt.s1 { background: var(--s1); fill: var(--s1); }
+.exp-dot.s2, .exp-pt.s2 { background: var(--s2); fill: var(--s2); }
+.exp-dot.s3, .exp-pt.s3 { background: var(--s3); fill: var(--s3); }
+.exp-dot.s4, .exp-pt.s4 { background: var(--s4); fill: var(--s4); }
+.chart .exp-pt { stroke: var(--surface); stroke-width: 2; }
+.chart .exp-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .exp-line.s1 { stroke: var(--s1); }
+.chart .exp-line.s2 { stroke: var(--s2); }
+.chart .exp-line.s3 { stroke: var(--s3); }
+.chart .exp-line.s4 { stroke: var(--s4); }
+.chart .grid.zero { stroke: var(--muted); }
+.chip.exp-on .exp-dot { box-shadow: 0 0 0 2px var(--surface); }
+.exp-row .row-side { text-align: right; display: grid; justify-items: end; }
+.exp-chg { color: var(--muted); font-size: var(--step--1); }
+.exp-chg.up { color: var(--accent); }
+.tip .exp-dot { width: 8px; height: 8px; }
+.exp-chart .tip { max-width: 94%; }

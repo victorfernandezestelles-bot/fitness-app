@@ -4,6 +4,7 @@ import { KCAL_PER_KG, MEASURES, MEASURE_BY_K, dataEnergy, dayOf, formulaEnergy, 
 import { ACTIONS, CHANGES, FORMS, HOOKS, SHEETS, VIEWS, chartTooltip, closeSheets, pageList, pushSheet, render, toast, undoable } from './ui.js';
 import { reportCard } from './report.js';
 import { fillPhotoCard, photoCard } from './photos.js';
+import { drawExProgress, exProgressCard } from './exprogress.js';
 
 export function viewProgreso() {
   const all = Object.keys(S.weights).sort();
@@ -75,6 +76,8 @@ export function viewProgreso() {
     </details>`;
     })() : ''}
   </section>
+
+  ${exProgressCard('me')}
 
   ${viewEnergy()}
 
@@ -476,7 +479,7 @@ Object.assign(ACTIONS, {
 
 /* ---------- registro de vista, cambios y formularios ---------- */
 
-VIEWS.progreso = { html: viewProgreso, after: () => { drawCharts(); fillPhotoCard(); } };
+VIEWS.progreso = { html: viewProgreso, after: () => { drawCharts(); drawExProgress('me'); fillPhotoCard(); } };
 HOOKS.resize.push(() => { if (S.ui.tab === 'progreso' && !S.sheets.length) drawCharts(); });
 
 CHANGES.rate = (el) => {
