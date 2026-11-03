@@ -1,6 +1,6 @@
 // Cuenta: tipo (desarrollador, entrenador, cliente, usuario libre o pendiente), activación con código,
-// solicitud para ser entrenador, modo solo lectura y borrado de la cuenta.
-// Lo que decide quién puede qué está en el servidor (supabase/002-cuentas.sql); aquí solo se refleja.
+// vínculo con un entrenador, solicitud para ser entrenador, modo solo lectura y borrado de la cuenta.
+// Lo que decide quién puede qué está en el servidor (supabase/002 y 003); aquí solo se refleja.
 import * as store from './store.js';
 import { $, dateShort, esc } from './util.js';
 import { GUARD, S, SAVED, wipeAll } from './state.js';
@@ -18,15 +18,28 @@ let bannerEl = null;
 export const myProfile = () => profile;
 export const isDev = () => accessState() === 'active' && profile?.role === 'dev';
 
-// guest: sin sesión · pending · blocked · active. Sin servidor configurado, o sin perfil todavía, la app sigue abierta.
+// guest: sin sesión · pending (también «sin entrenador») · blocked (por el equipo de la app) ·
+// paused (por su entrenador) · active. Sin servidor configurado, o sin perfil todavía, la app sigue abierta.
 export function accessState() {
   if (!syncConfigured()) return 'active';
   if (!isLoggedIn()) return 'guest';
   if (!profile) return 'active';
   if (profile.blocked) return 'blocked';
   if (profile.role === 'pending') return 'pending';
+  if (profile.role === 'client') {
+    const l = profile.link;
+    if (!l || (l.unlink_at && Date.parse(l.unlink_at) <= Date.now())) return 'pending';
+    if (l.status === 'blocked') return 'paused';
+  }
   return 'active';
 }
+
+// Tiene pestaña Clientes: entrenadores y desarrolladores, y quien dejó de serlo mientras le quedan clientes
+export const isCoach = () => accessState() === 'active'
+  && (['trainer', 'dev'].includes(profile?.role) || (profile?.coaching?.clients || 0) > 0);
+
+// 18/11/2026
+export const dateNum = (s) => new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 GUARD.canWrite = () => accessState() === 'active';
 SYNC_HOOKS.canPush = () => accessState() === 'active';
@@ -47,6 +60,12 @@ const ERRORS = {
   already_resolved: 'Esa solicitud ya estaba resuelta.',
   not_found: 'No se ha encontrado.',
   no_profile: 'Tu cuenta aún no tiene perfil. Vuelve a intentarlo en un momento.',
+  already_linked: 'Ya estás vinculado con ese entrenador.',
+  link_refused: 'Ese entrenador no acepta tu solicitud.',
+  no_link: 'No tienes ningún entrenador vinculado.',
+  bad_state: 'Ya no está en ese estado. Actualiza la lista.',
+  no_clients: 'No tienes clientes pendientes de desvincular.',
+  bad_date: 'Elige una fecha posterior a hoy.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
@@ -54,10 +73,28 @@ export function errorText(e) {
   return key ? ERRORS[key] : 'No se ha podido completar (' + (e?.message || 'error') + ').';
 }
 
+// Lo del perfil que se ve en las pestañas (Hoy, Ajustes, Clientes)
+const shown = (p) => JSON.stringify(p ? [p.role, p.name, p.link, p.link_request, p.link_last, p.coaching, p.trainer_code, p.request] : null);
+
 async function setProfile(p) {
+  const before = accessState();
+  const was = shown(profile);
   profile = p || null;
   try { if (profile) await store.put('sync:profile', profile); else await store.del('sync:profile'); } catch (e) { /* sin almacén */ }
   applyAccess();
+  // Si la cuenta se acaba de activar (p. ej. el entrenador ha aceptado la solicitud), se abre la app
+  if (profile && before !== 'active' && accessState() === 'active') { readOnlyChosen = false; applyAccess(); render(); maybeOnboard(); }
+  else if (was !== shown(profile) && ['hoy', 'ajustes', 'clientes'].includes(S.ui.tab)) rerenderSoon();
+}
+
+// Ajustes y Clientes muestran datos del perfil: se repintan si no hay nada abierto ni se está escribiendo
+let rerenderTimer = 0;
+function rerenderSoon() {
+  clearTimeout(rerenderTimer);
+  rerenderTimer = setTimeout(() => {
+    const typing = document.activeElement?.matches?.('input, textarea, select');
+    if (!S.sheets.length && !typing) render();
+  }, 50);
 }
 
 // Devuelve el error si no se ha podido consultar (sin conexión, servidor sin la fase 1…)
@@ -99,7 +136,9 @@ function applyAccess() {
   document.body.classList.toggle('read-only', closed && readOnlyChosen);
   const adminTab = document.querySelector('.tab[data-tab="admin"]');
   if (adminTab) adminTab.hidden = !isDev();
-  if (!isDev() && S.ui.tab === 'admin') { S.ui.tab = 'ajustes'; render(); }
+  const coachTab = document.querySelector('.tab[data-tab="clientes"]');
+  if (coachTab) coachTab.hidden = !isCoach();
+  if ((!isDev() && S.ui.tab === 'admin') || (!isCoach() && S.ui.tab === 'clientes')) { S.ui.tab = 'ajustes'; render(); }
   // Puerta
   if (!gateEl) {
     gateEl = document.createElement('div');
@@ -112,7 +151,8 @@ function applyAccess() {
   gateEl.hidden = !closed || readOnlyChosen;
   if (!gateEl.hidden) gateEl.innerHTML = gateHTML(st);
   bannerEl.hidden = !(closed && readOnlyChosen);
-  if (!bannerEl.hidden) bannerEl.innerHTML = `<span>Solo lectura · ${st === 'blocked' ? 'acceso pausado' : st === 'pending' ? 'cuenta sin activar' : 'sin sesión'}</span><button type="button" class="btn small" data-act="acct-gate">Opciones</button>`;
+  const why = { blocked: 'acceso pausado', paused: 'pausado por tu entrenador', pending: profile?.role === 'client' ? 'sin entrenador' : 'cuenta sin activar', guest: 'sin sesión' }[st];
+  if (!bannerEl.hidden) bannerEl.innerHTML = `<span>Solo lectura · ${why}</span><button type="button" class="btn small" data-act="acct-gate">Opciones</button>`;
   document.body.classList.toggle('gated', !gateEl.hidden);
 }
 
@@ -124,6 +164,45 @@ function requestLine() {
   if (r.status === 'pending') return `<p class="gate-note">Solicitud para ser entrenador enviada el ${dateShort(r.created_at.slice(0, 10))}: pendiente de revisar.</p>`;
   if (r.status === 'rejected') return `<p class="gate-note">Tu solicitud para ser entrenador no se ha aprobado${r.reply ? `: «${esc(r.reply)}»` : '.'}</p>`;
   return '';
+}
+
+// Formulario de código: sirve tanto para el código de un entrenador (ENT-…) como para uno de activación (FIT-…)
+function codeForm(placeholder, label, button) {
+  return `<form data-form="acct-code" class="gate-code" novalidate>
+    <input type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="${placeholder}" aria-label="${label}">
+    <button type="submit" class="btn">${button}</button>
+  </form>`;
+}
+
+const trainerName = (x) => `<b>${esc(x?.trainer_name || 'tu entrenador')}</b>`;
+
+// Qué pasó con el último vínculo (para explicar por qué ya no hay entrenador)
+function lastLinkLine() {
+  const l = profile?.link_last;
+  if (!l || profile?.link || profile?.link_request) return '';
+  const t = trainerName(l);
+  const d = l.ended_at ? dateNum(l.ended_at) : '';
+  const txt = l.status === 'rejected'
+    ? (l.ended_by === 'trainer_off' ? `${t} ya no es entrenador en la app: tu solicitud se ha anulado.` : `${t} no ha aceptado tu solicitud.`)
+    : l.ended_by === 'trainer' ? `${t} te desvinculó el ${d}.`
+    : l.ended_by === 'client' ? `Te desvinculaste de ${t} el ${d}.`
+    : l.ended_by === 'expired' ? `Tu cuenta quedó desvinculada de ${t} el ${d}.`
+    : '';
+  return txt ? `<p class="gate-note">${txt}</p>` : '';
+}
+
+function linkRequestLine(cls) {
+  const r = profile?.link_request;
+  if (!r) return '';
+  return `<div class="${cls}"><p>Has enviado una solicitud a ${trainerName(r)} el ${dateShort(r.created_at.slice(0, 10))}. ${profile.link ? 'Cuando la acepte, cambiarás de entrenador.' : 'Podrás usar la app cuando la acepte.'}</p>
+    <button type="button" class="link" data-act="acct-link-cancel">Anular la solicitud</button></div>`;
+}
+
+// Aviso de desvinculación programada (el entrenador dejó de serlo)
+export function linkNotice() {
+  const l = profile?.link;
+  if (!l?.unlink_at || accessState() !== 'active' || Date.parse(l.unlink_at) <= Date.now()) return '';
+  return `<div class="notice small link-notice"><p>Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>.${profile.role === 'client' ? ' Después necesitarás el código de otro entrenador o un código de activación.' : ''}</p></div>`;
 }
 
 function gateHTML(st) {
@@ -138,16 +217,23 @@ function gateHTML(st) {
       <button type="button" class="btn wide" data-act="sync-login">Entrar o crear cuenta</button>
       ${hasLocalData() ? `<p class="gate-note">Tienes datos guardados en este dispositivo. Al entrar se juntan con los de tu cuenta.</p>${common}` : ''}`;
   } else if (st === 'pending') {
+    const noTrainer = profile?.role === 'client' || profile?.link_last;
     body = `
-      <h1>Activa tu cuenta</h1>
-      <p>Para usar la app necesitas un <b>código de activación</b>. Si te lo ha dado un entrenador o el equipo de la app, escríbelo aquí.</p>
-      <form data-form="acct-code" class="gate-code" novalidate>
-        <input id="acct-code-in" type="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="FIT-XXXX-XXXX" aria-label="Código de activación">
-        <button type="submit" class="btn">Activar</button>
-      </form>
+      <h1>${noTrainer ? 'Sin entrenador' : 'Activa tu cuenta'}</h1>
+      ${lastLinkLine()}
+      ${profile?.link_request ? linkRequestLine('gate-wait') : `<p>Para usar la app necesitas el <b>código de tu entrenador</b> o un <b>código de activación</b> del equipo de la app.</p>`}
+      ${codeForm('ENT-… o FIT-…', 'Código de tu entrenador o de activación', profile?.link_request ? 'Usar otro' : 'Continuar')}
       ${requestLine()}
       ${profile?.request?.status === 'pending' ? '' : '<button type="button" class="btn ghost wide" data-act="acct-request">Soy entrenador: solicitar acceso</button>'}
       ${common}`;
+  } else if (st === 'paused') {
+    body = `
+      <h1>Acceso pausado</h1>
+      <p>${trainerName(profile.link)} ha pausado tu acceso a la app. Tus datos siguen siendo tuyos: puedes verlos, descargarlos o borrar tu cuenta cuando quieras.</p>
+      ${profile.link_request ? linkRequestLine('gate-wait') : '<p class="gate-note">Si quieres seguir con otro entrenador, escribe su código:</p>'}
+      ${codeForm('ENT-XXXX-XXXX', 'Código de otro entrenador', profile.link_request ? 'Usar otro' : 'Continuar')}
+      ${common}
+      <button type="button" class="btn ghost wide" data-act="acct-unlink">Desvincularme de ${esc(profile.link?.trainer_name || 'mi entrenador')}</button>`;
   } else {
     body = `
       <h1>Acceso pausado</h1>
@@ -187,6 +273,7 @@ export function accountCard() {
       <label class="field"><span>Tu nombre</span><input id="acct-name-in" type="text" value="${esc(p.name || '')}" maxlength="60" autocomplete="name" placeholder="Cómo te verá tu entrenador"></label>
       <button type="submit" class="btn ghost small">Guardar</button>
     </form>` : ''}
+    ${p && !p.blocked ? trainerSection(p) : ''}
     <p class="muted" id="sync-status">${statusText()}</p>
     <div class="btn-row two top-gap">
       <button type="button" class="btn ghost" data-act="sync-now">Sincronizar ahora</button>
@@ -200,7 +287,48 @@ export function accountCard() {
   </section>`;
 }
 
+function trainerSection(p) {
+  const l = p.link;
+  let html = '';
+  if (l) {
+    html += `<p>Tu entrenador: ${trainerName(l)}${l.since ? ` · desde el ${dateShort(l.since.slice(0, 10))}` : ''}</p>`;
+    if (l.status === 'blocked') html += '<p class="hint">Ha pausado tu acceso como cliente.</p>';
+    if (l.unlink_at) html += `<p class="hint warn-text">Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>.</p>`;
+  } else {
+    html += lastLinkLine().replace('gate-note', 'hint');
+  }
+  html += linkRequestLine('hint');
+  if (!p.link_request) {
+    html += `<p class="hint">${l ? 'Para cambiar de entrenador, escribe el código del nuevo:' : '¿Tienes entrenador? Escribe su código para vincularte:'}</p>
+      ${codeForm('ENT-XXXX-XXXX', 'Código de tu entrenador', l ? 'Cambiar' : 'Vincular')}`;
+  }
+  if (l) html += '<button type="button" class="btn ghost small top-gap" data-act="acct-unlink">Desvincularme</button>';
+  return `<div class="acct-link"><h3 class="sub-title">Entrenador</h3>${html}</div>`;
+}
+
 /* ---------- hojas ---------- */
+
+SHEETS['link-consent'] = {
+  title: () => 'Vincular con tu entrenador',
+  render: (s) => {
+    const p = profile || {};
+    return `
+    <p>Vas a enviar una solicitud a <b>${esc(s.name)}</b>. Cuando la acepte:</p>
+    <ul class="consent-list">
+      <li>Verá tu nombre y tu correo.</li>
+      <li>Podrá ver (sin cambiarlos) tu diario de comidas, tus entrenamientos, tu peso, tus medidas y tus objetivos.</li>
+      <li>No verá tus fotos, salvo que tú decidas compartirlas.</li>
+      <li>Podrá pausar tu acceso a la app o desvincularte. Tú puedes desvincularte cuando quieras.</li>
+    </ul>
+    ${p.role === 'free' ? '<p class="hint">Tu cuenta dejará de ser de usuario libre y pasará a depender de tu entrenador. Si más adelante os desvinculáis, necesitarás otro entrenador o un código de activación nuevo.</p>' : ''}
+    ${p.link ? `<p class="hint">Cuando la acepte, dejarás de estar vinculado a ${esc(p.link.trainer_name || 'tu entrenador actual')}.</p>` : ''}
+    ${p.link_request ? `<p class="hint">Se anulará tu solicitud a ${esc(p.link_request.trainer_name || 'otro entrenador')}.</p>` : ''}
+    <label class="check top-gap"><input type="checkbox" id="lc-ok"> Entiendo y acepto compartir estos datos con ${esc(s.name)}</label>
+    ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+    <div class="sheet-actions"><button type="button" class="btn primary" data-act="acct-link-send" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Enviando…' : 'Enviar solicitud'}</button></div>`;
+  },
+};
+
 
 SHEETS['trainer-request'] = {
   title: () => 'Solicitar acceso de entrenador',
@@ -226,10 +354,20 @@ SHEETS['delete-account'] = {
 
 /* ---------- acciones ---------- */
 
-FORMS['acct-code'] = async () => {
-  const input = $('#acct-code-in');
-  const code = input.value.trim().toUpperCase();
+FORMS['acct-code'] = async (form) => {
+  const code = form.querySelector('input').value.trim().toUpperCase().replace(/\s+/g, '');
   if (code.length < 6) { toast('Escribe el código completo.'); return; }
+  if (code.startsWith('ENT')) {
+    try {
+      const t = await rpc('lookup_trainer', { p_code: code });
+      pushSheet({ type: 'link-consent', code, name: t?.name || 'tu entrenador' });
+    } catch (e) { toast(errorText(e)); }
+    return;
+  }
+  if (profile && profile.role !== 'pending' && !(profile.role === 'client' && accessState() === 'pending')) {
+    toast(accessState() === 'paused' ? 'Para usar un código de activación, primero desvincúlate de tu entrenador.' : 'Ese es un código de activación y tu cuenta ya está activa. Para vincularte, usa el código de tu entrenador (ENT-…).');
+    return;
+  }
   try {
     await setProfile(await rpc('redeem_code', { p_code: code }));
     toast('¡Cuenta activada!');
@@ -294,6 +432,34 @@ Object.assign(ACTIONS, {
     }
   },
   'acct-delete': () => pushSheet({ type: 'delete-account' }),
+  'acct-link-send': async (el, top) => {
+    if (!$('#lc-ok')?.checked) { top.error = 'Marca la casilla para aceptar.'; renderSheets(); return; }
+    top.busy = true; top.error = '';
+    renderSheets();
+    try {
+      await setProfile(await rpc('link_request', { p_code: top.code }));
+      closeSheets();
+      render();
+      toast('Solicitud enviada');
+    } catch (e) {
+      top.busy = false; top.error = errorText(e);
+      renderSheets();
+    }
+  },
+  'acct-link-cancel': () => pushSheet({
+    type: 'confirm', title: 'Anular la solicitud', ok: 'Anular',
+    text: `Se anulará tu solicitud a ${profile?.link_request?.trainer_name || 'tu entrenador'}.`,
+    onOk: async () => {
+      try { await setProfile(await rpc('link_cancel')); render(); toast('Solicitud anulada'); } catch (e) { toast(errorText(e)); }
+    },
+  }),
+  'acct-unlink': () => pushSheet({
+    type: 'confirm', title: 'Desvincularme', ok: 'Desvincularme', danger: true,
+    text: `Dejarás de estar vinculado a ${profile?.link?.trainer_name || 'tu entrenador'} y ya no podrá ver tus datos.${profile?.role === 'client' ? ' Para seguir usando la app necesitarás el código de otro entrenador o un código de activación.' : ''}`,
+    onOk: async () => {
+      try { await setProfile(await rpc('client_unlink')); render(); toast('Te has desvinculado'); } catch (e) { toast(errorText(e)); }
+    },
+  }),
 });
 
 HOOKS.visible.push(() => { if (isLoggedIn()) refreshProfile(); });

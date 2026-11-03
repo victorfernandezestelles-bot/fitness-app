@@ -990,3 +990,19 @@ body.read-only { padding-top: calc(env(safe-area-inset-top, 0px) + 48px); }
 .req-done { font-size: var(--step--1); color: var(--muted); }
 .rep-v.small { font-family: var(--font-body); font-weight: 700; font-size: var(--step--1); font-stretch: 100%; word-break: break-word; }
 body.read-only .fab { display: none; }
+
+/* ---------- entrenador y clientes ---------- */
+.acct-link { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 14px 0 10px; padding: 12px 0; display: grid; gap: 8px; justify-items: stretch; }
+.acct-link > .btn.small { justify-self: start; }
+.acct-link .hint { margin-top: 0; }
+.sub-title { font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.warn-text { color: var(--danger); }
+.gate-wait { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; justify-items: start; }
+.hint .link, .gate-wait .link { font-size: var(--step--1); }
+.consent-list { margin: 10px 0 4px 1.1em; padding: 0; display: grid; gap: 6px; line-height: 1.45; }
+.link-notice { background: var(--danger-soft); color: var(--ink); }
+.gate-code input::placeholder { text-transform: none; letter-spacing: 0; }
+.coach-code-v { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: var(--step-2); font-weight: 800; letter-spacing: 0.06em; margin: 4px 0 10px;
+  user-select: all; -webkit-user-select: all; overflow-wrap: anywhere; }
+.coach-off { display: grid; gap: 8px; justify-items: start; }
+.coach-off p { flex: none; }

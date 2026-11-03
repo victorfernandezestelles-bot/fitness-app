@@ -4,7 +4,7 @@ import { $, dateShort, esc, iso, norm, num, plural } from './util.js';
 import { S } from './state.js';
 import { ACTIONS, FORMS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
-import { ROLE_NAME, errorText, myProfile } from './account.js';
+import { ROLE_NAME, dateNum, errorText, myProfile } from './account.js';
 
 const FILTERS = [
   ['all', 'Todos'], ['dev', 'Desarrolladores'], ['trainer', 'Entrenadores'], ['client', 'Clientes'],
@@ -53,9 +53,18 @@ function userRows(shown) {
   if (!shown.length) return '<p class="empty">Ningún usuario con este filtro.</p>';
   const pl = pageList('admin-users', shown, 30, (u) => `<li><button type="button" class="row" data-act="adm-user" data-id="${u.id}">
       <span class="row-main">${userLabel(u)}${u.blocked ? ' <em class="tag tag-danger">bloqueado</em>' : ''}</span>
-      <span class="row-sub">${esc(u.email || '')} · ${ROLE_NAME[u.role] || u.role} · alta ${when(u.created_at)}${u.last_activity ? ` · activo ${when(u.last_activity)}` : ''}</span>
+      <span class="row-sub">${esc(u.email || '')} · ${ROLE_NAME[u.role] || u.role}${linkInfo(u)} · alta ${when(u.created_at)}${u.last_activity ? ` · activo ${when(u.last_activity)}` : ''}</span>
     </button></li>`);
   return `<ul class="list">${pl.html}</ul>${pl.more}`;
+}
+
+// «de Toni», «3 clientes», «se desvinculan el …»
+function linkInfo(u) {
+  const out = [];
+  if (u.trainer_name) out.push(`de ${esc(u.trainer_name)}${u.link_status === 'blocked' ? ' (pausado)' : ''}`);
+  if (Number(u.clients)) out.push(plural(Number(u.clients), 'cliente', 'clientes'));
+  if (u.unlink_at) out.push(`se desvinculan el ${dateNum(u.unlink_at)}`);
+  return out.length ? ' · ' + out.join(' · ') : '';
 }
 
 function codeStatus(c) {
@@ -98,16 +107,18 @@ function codesView() {
 function requestsView() {
   const list = data.requests;
   if (!list) return '<p class="muted">Cargando solicitudes…</p>';
-  if (!list.length) return '<p class="empty">No hay solicitudes para ser entrenador.</p>';
+  if (!list.length) return '<p class="empty">No hay solicitudes.</p>';
   const pend = list.filter((r) => r.status === 'pending');
   const done = list.filter((r) => r.status !== 'pending');
+  const ext = (r) => r.kind === 'extension';
   const card = (r) => `<li class="req${r.status === 'pending' ? ' pending' : ''}">
     <div class="req-head"><b>${userLabel(r)}</b><span class="muted">${when(r.created_at)}</span></div>
-    <p class="muted">${esc(r.email || '')} · ${ROLE_NAME[r.role] || r.role}</p>
+    <p><em class="tag">${ext(r) ? 'Ampliar plazo' : 'Ser entrenador'}</em></p>
+    <p class="muted">${esc(r.email || '')} · ${ROLE_NAME[r.role] || r.role}${ext(r) && r.status === 'pending' ? ` · ${plural(Number(r.clients) || 0, 'cliente', 'clientes')}${r.unlink_at ? ` · se desvinculan el ${dateNum(r.unlink_at)}` : ''}` : ''}</p>
     <p class="req-msg">${esc(r.message || '(sin mensaje)')}</p>
     ${r.status === 'pending'
-      ? `<div class="btn-row two"><button type="button" class="btn ghost" data-act="adm-resolve" data-id="${r.id}" data-v="0">Rechazar</button><button type="button" class="btn" data-act="adm-resolve" data-id="${r.id}" data-v="1">Aprobar</button></div>`
-      : `<p class="req-done">${r.status === 'approved' ? 'Aprobada' : 'Rechazada'} el ${when(r.resolved_at)}${r.reply ? ` · «${esc(r.reply)}»` : ''}</p>`}
+      ? `<div class="btn-row two"><button type="button" class="btn ghost" data-act="adm-resolve" data-id="${r.id}" data-v="0">Rechazar</button><button type="button" class="btn" data-act="adm-resolve" data-id="${r.id}" data-v="1">${ext(r) ? 'Ampliar' : 'Aprobar'}</button></div>`
+      : `<p class="req-done">${r.status === 'approved' ? (ext(r) && r.until ? `Ampliado hasta el ${dateNum(r.until)}` : 'Aprobada') : 'Rechazada'} · ${when(r.resolved_at)}${r.reply ? ` · «${esc(r.reply)}»` : ''}</p>`}
   </li>`;
   return `
     ${pend.length ? `<h3 class="list-title">Pendientes (${pend.length})</h3><ul class="req-list">${pend.map(card).join('')}</ul>` : '<p class="empty">No hay solicitudes pendientes.</p>'}
@@ -144,22 +155,27 @@ SHEETS['admin-user'] = {
         <div class="rep-line"><span class="rep-l">Alta</span><span class="rep-v small">${when(u.created_at)}</span></div>
         <div class="rep-line"><span class="rep-l">Activado</span><span class="rep-v small">${when(u.activated_at)}${u.code_used ? ` · ${esc(u.code_used)}` : ''}</span></div>
         <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${when(u.last_activity)}</span></div>
+        ${u.trainer_name ? `<div class="rep-line"><span class="rep-l">Entrenador</span><span class="rep-v small">${esc(u.trainer_name)}${u.link_status === 'blocked' ? ' · le ha pausado' : ''}</span></div>` : ''}
+        ${Number(u.clients) ? `<div class="rep-line"><span class="rep-l">Clientes</span><span class="rep-v small">${u.clients}${u.unlink_at ? ` · se desvinculan el ${dateNum(u.unlink_at)}` : ''}</span></div>` : ''}
       </div>
       ${self ? '<p class="hint top-gap">Es tu cuenta: no puedes cambiar su tipo ni bloquearla.</p>' : `
       <div class="field top-gap"><span>Cambiar el tipo</span>
         <div class="chips">${['dev', 'trainer', 'free', 'pending'].map((r) => `<button type="button" class="chip${u.role === r ? ' on' : ''}" data-act="adm-role" data-v="${r}" aria-pressed="${u.role === r}">${ROLE_NAME[r]}</button>`).join('')}</div>
       </div>
-      <p class="hint">Los clientes se asignan cuando se vinculan a un entrenador (fase 2). La cuenta solo la puede borrar el propio usuario.</p>
+      <p class="hint">Los clientes se asignan solos cuando un entrenador acepta su solicitud. Si quitas el tipo de entrenador a alguien, sus clientes siguen vinculados 15 días y después quedan sin entrenador. La cuenta solo la puede borrar el propio usuario.</p>
       <div class="sheet-actions"><button type="button" class="btn ${u.blocked ? '' : 'danger ghost'}" data-act="adm-block" data-v="${u.blocked ? 0 : 1}">${u.blocked ? 'Desbloquear acceso' : 'Bloquear acceso'}</button></div>`}`;
   },
 };
 
 SHEETS['admin-resolve'] = {
-  title: (s) => (s.approve ? 'Aprobar solicitud' : 'Rechazar solicitud'),
+  title: (s) => (s.ext ? (s.approve ? 'Ampliar plazo' : 'Rechazar ampliación') : s.approve ? 'Aprobar solicitud' : 'Rechazar solicitud'),
   render: (s) => `
-    <p>${s.approve ? 'La cuenta pasará a ser de <b>entrenador</b>.' : 'La cuenta seguirá como está.'} Puedes dejar un comentario, que verá el solicitante.</p>
+    <p>${s.ext
+      ? (s.approve ? 'Elige la nueva fecha en la que sus clientes quedarán desvinculados.' : 'Se mantiene la fecha actual.')
+      : (s.approve ? 'La cuenta pasará a ser de <b>entrenador</b>.' : 'La cuenta seguirá como está.')} Puedes dejar un comentario, que verá el solicitante.</p>
+    ${s.ext && s.approve ? `<label class="field top-gap"><span>Nueva fecha</span><input id="res-until" type="date" value="${s.until}" min="${iso(new Date(Date.now() + 864e5))}"></label>` : ''}
     <label class="field top-gap"><span>Comentario (opcional)</span><textarea id="res-reply" rows="3" maxlength="1000"></textarea></label>
-    <div class="sheet-actions"><button type="button" class="btn ${s.approve ? 'primary' : 'danger'}" data-act="adm-resolve-ok">${s.approve ? 'Aprobar' : 'Rechazar'}</button></div>`,
+    <div class="sheet-actions"><button type="button" class="btn ${s.approve ? 'primary' : 'danger'}" data-act="adm-resolve-ok">${s.approve ? (s.ext ? 'Ampliar' : 'Aprobar') : 'Rechazar'}</button></div>`,
 };
 
 async function act(fn, ok) {
@@ -194,6 +210,7 @@ Object.assign(ACTIONS, {
     if (await act(() => rpc('admin_set_role', { p_user: top.u.id, p_role: role }), `Ahora es ${ROLE_NAME[role].toLowerCase()}`)) {
       top.u = { ...top.u, role };
       await load('users', true);
+      top.u = (data.users || []).find((x) => x.id === top.u.id) || top.u;
       renderSheets();
     }
   },
@@ -212,9 +229,21 @@ Object.assign(ACTIONS, {
     type: 'confirm', title: 'Anular código', text: `El código ${el.dataset.v} dejará de servir para activar cuentas. Las cuentas que ya lo usaron siguen activas.`, ok: 'Anular', danger: true,
     onOk: async () => { await act(() => rpc('admin_revoke_code', { p_code: el.dataset.v }), 'Código anulado'); await load('codes', true); render(); },
   }),
-  'adm-resolve': (el) => pushSheet({ type: 'admin-resolve', id: Number(el.dataset.id), approve: el.dataset.v === '1' }),
+  'adm-resolve': (el) => {
+    const r = (data.requests || []).find((x) => x.id === Number(el.dataset.id));
+    const ext = r?.kind === 'extension';
+    // Por defecto, 30 días más sobre la fecha actual
+    const base = r?.unlink_at ? Date.parse(r.unlink_at) : Date.now();
+    pushSheet({ type: 'admin-resolve', id: Number(el.dataset.id), approve: el.dataset.v === '1', ext, until: iso(new Date(Math.max(base, Date.now()) + 30 * 864e5)) });
+  },
   'adm-resolve-ok': async (el, top) => {
-    const ok = await act(() => rpc('admin_resolve_request', { p_id: top.id, p_approve: top.approve, p_reply: $('#res-reply').value }), top.approve ? 'Solicitud aprobada' : 'Solicitud rechazada');
+    const args = { p_id: top.id, p_approve: top.approve, p_reply: $('#res-reply').value };
+    if (top.ext && top.approve) {
+      const d = $('#res-until').value;
+      if (!d) { toast('Elige la nueva fecha.'); return; }
+      args.p_until = new Date(d + 'T23:59:00').toISOString();
+    }
+    const ok = await act(() => rpc('admin_resolve_request', args), top.ext ? (top.approve ? 'Plazo ampliado' : 'Ampliación rechazada') : top.approve ? 'Solicitud aprobada' : 'Solicitud rechazada');
     if (!ok) return;
     closeSheets();
     data.users = null;

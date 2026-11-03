@@ -9,6 +9,7 @@ import { initSync } from './sync.js';
 import { accessState, initAccount } from './account.js';
 // Cada sección registra sus vistas, hojas y acciones al cargarse
 import './admin.js';
+import './clients.js';
 import './food.js';
 import './progress.js';
 import './settings.js';
