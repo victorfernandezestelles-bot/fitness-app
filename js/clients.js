@@ -1,11 +1,12 @@
 // Pestaña Clientes (entrenadores y desarrolladores): su código, las solicitudes y la lista de clientes
 // con pausar, reanudar y desvincular. También la ve quien dejó de ser entrenador mientras le quedan clientes,
 // con el aviso del plazo y la solicitud para ampliarlo. Las reglas están en supabase/003-entrenadores.sql.
-import { $, dateShort, esc, iso, norm, plural } from './util.js';
+import { $, dateShort, esc, iso, norm, plural, today } from './util.js';
 import { S, SAVED } from './state.js';
 import { ACTIONS, INPUTS, SHEETS, VIEWS, closeSheets, pushSheet, render, renderSheets, toast } from './ui.js';
 import { SYNC_HOOKS, rpc } from './sync.js';
 import { dateNum, errorText, myProfile, refreshProfile } from './account.js';
+import { fichaAfter, fichaHTML, forgetFichas } from './ficha.js';
 
 const data = { list: null, error: '' };
 let loading = false;
@@ -26,6 +27,7 @@ async function load(force = false) {
   if (S.ui.tab === 'clientes' && !S.sheets.length) render();
 }
 
+const find = (id) => (data.list || []).find((c) => c.link_id === Number(id));
 const when = (iso) => (iso ? dateShort(iso.slice(0, 10)) : '–');
 const label = (c) => esc(c.name || c.email || 'Sin nombre');
 const isTrainer = () => ['trainer', 'dev'].includes(myProfile()?.role);
@@ -92,6 +94,12 @@ function clientRows(shown, f) {
 
 export function viewClients() {
   load();
+  if (S.ui.client) {
+    const c = find(S.ui.client);
+    if (c && (c.status === 'active' || c.status === 'blocked')) return fichaHTML(c);
+    if (data.list) S.ui.client = null;
+    else return '<p class="muted">Cargando…</p>';
+  }
   const p = myProfile();
   const list = data.list;
   let body;
@@ -142,7 +150,6 @@ SHEETS['client'] = {
         <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${when(c.last_activity)}</span></div>
         ${c.unlink_at ? `<div class="rep-line"><span class="rep-l">Se desvincula</span><span class="rep-v small">${dateNum(c.unlink_at)}</span></div>` : ''}
       </div>
-      <p class="hint top-gap">Pronto podrás ver aquí su diario, sus entrenos y su progreso.</p>
       ${isTrainer() ? `<p class="hint">${c.status === 'blocked' ? 'Mientras esté pausado, puede ver y descargar sus datos, pero no usar la app.' : 'Si lo pausas, podrá ver y descargar sus datos, pero no usar la app hasta que lo reanudes.'}</p>` : ''}
       <div class="sheet-actions">
         <button type="button" class="btn ghost danger" data-act="cl-unlink">Desvincular</button>
@@ -170,8 +177,6 @@ SHEETS['coach-extend'] = {
 
 /* ---------- acciones ---------- */
 
-const find = (id) => (data.list || []).find((c) => c.link_id === Number(id));
-
 async function act(fn, ok) {
   try {
     await fn();
@@ -191,7 +196,17 @@ Object.assign(ACTIONS, {
   'cl-copy': async (el) => {
     try { await navigator.clipboard.writeText(el.dataset.v); toast('Código copiado'); } catch (e) { toast('No se ha podido copiar: mantén pulsado el código para copiarlo.'); }
   },
-  'cl-open': (el) => { const c = find(el.dataset.id); if (c) pushSheet({ type: 'client', c }); },
+  'cl-open': (el) => {
+    const c = find(el.dataset.id);
+    if (!c) return;
+    if (c.status === 'active' || c.status === 'blocked') {
+      Object.assign(S.ui, { client: c.link_id, ftab: 'resumen', fdate: today() });
+      render();
+      window.scrollTo(0, 0);
+    } else pushSheet({ type: 'client', c });
+  },
+  'cl-back': () => { S.ui.client = null; render(); window.scrollTo(0, 0); },
+  'cl-manage': () => { const c = find(S.ui.client); if (c) pushSheet({ type: 'client', c }); },
   'cl-accept': async (el) => {
     const c = find(el.dataset.id);
     await act(() => rpc('trainer_respond', { p_link: c.link_id, p_action: 'accept' }), `${c.name || c.email} ya es tu cliente`);
@@ -224,7 +239,7 @@ Object.assign(ACTIONS, {
       type: 'confirm', title: 'Desvincular cliente', ok: 'Desvincular', danger: true,
       text: `${c.name || c.email} dejará de ser tu cliente y ya no verás sus datos. Si su cuenta depende de ti, necesitará otro entrenador o un código de activación para seguir usando la app.`,
       onOk: async () => {
-        if (await act(() => rpc('trainer_unlink', { p_link: c.link_id }), 'Cliente desvinculado')) { closeSheets(); render(); }
+        if (await act(() => rpc('trainer_unlink', { p_link: c.link_id }), 'Cliente desvinculado')) { closeSheets(); S.ui.client = null; render(); }
       },
     });
   },
@@ -256,8 +271,8 @@ INPUTS['cl-q'] = (el) => {
 };
 
 // Al cambiar de cuenta o borrar los datos, se olvida la lista
-function resetClients() { data.list = null; data.error = ''; failed = false; }
+function resetClients() { data.list = null; data.error = ''; failed = false; S.ui.client = null; forgetFichas(); }
 SYNC_HOOKS.auth.push(resetClients);
 SAVED.push((key) => { if (key === '!wipe') resetClients(); });
 
-VIEWS.clientes = { html: viewClients };
+VIEWS.clientes = { html: viewClients, after: () => { if (S.ui.client) fichaAfter(); } };

@@ -1006,3 +1006,34 @@ body.read-only .fab { display: none; }
   user-select: all; -webkit-user-select: all; overflow-wrap: anywhere; }
 .coach-off { display: grid; gap: 8px; justify-items: start; }
 .coach-off p { flex: none; }
+
+/* ---------- ficha del cliente ---------- */
+.fc-head { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.fc-title { min-width: 0; }
+.fc-title h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-title p { font-size: var(--step--1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-body { display: grid; gap: 12px; margin-top: 14px; }
+.fc-body > .card { margin: 0; }
+.fc-foot { text-align: center; }
+.fc-goals { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-goal { background: var(--sunk); border-radius: 999px; padding: 4px 10px; font-size: var(--step--1); }
+.fc-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.fc-wd { display: grid; gap: 2px; justify-items: center; padding: 6px 0; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 0.75rem; cursor: pointer; }
+.fc-wd span { color: var(--muted); text-transform: uppercase; }
+.fc-wd b { font-variant-numeric: tabular-nums; font-size: 0.75rem; }
+.fc-wd.on { border-color: var(--accent); background: var(--accent-soft); }
+.fc-wd:disabled { opacity: 0.4; }
+.fc-macros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fc-macros > div { display: grid; gap: 1px; }
+.fc-macros .stat-v { font-size: var(--step-1); }
+.fc-big { font-family: var(--font-display); font-weight: 800; font-stretch: 85%; font-size: var(--step-2); }
+.fc-big small { font-family: var(--font-body); font-weight: 400; font-size: var(--step--1); margin-left: 6px; }
+.fc-exs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.fc-exs li { display: grid; gap: 4px; }
+.fc-exs li > span { display: flex; flex-wrap: wrap; gap: 4px; }
+.fc-set { background: var(--sunk); border-radius: 8px; padding: 2px 8px; font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.fc-set small { color: var(--muted); }
+.fc-set.warm { opacity: 0.7; }
+.fc-set.undone { text-decoration: line-through; opacity: 0.55; }
+.entry.static { cursor: default; }

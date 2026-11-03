@@ -73,6 +73,22 @@ function upgrade(key, value, v) {
 }
 const splitKey = (key) => { const i = key.indexOf('/'); return [key.slice(0, i), key.slice(i + 1)]; };
 
+// Filas de otra cuenta (la ficha de un cliente) a la misma forma que S, sin tocar los datos propios
+export function dataFromRows(list) {
+  const d = { settings: {}, days: {}, workouts: {}, foods: {}, recipes: {}, weights: {}, exercises: {}, routines: {}, measures: {}, activities: {} };
+  for (const r of list || []) {
+    let value;
+    try { value = upgrade(r.key, r.value, r.v); } catch (e) { continue; }
+    if (value == null) continue;
+    if (r.key === 'settings') d.settings = value;
+    else if (r.key.startsWith('day:')) d.days[r.key.slice(4)] = value;
+    else if (r.key.startsWith('wk:')) d.workouts[r.key.slice(3)] = value;
+    else { const [c, id] = splitKey(r.key); if (d[c]) d[c][id] = value; }
+  }
+  d.settings = mergeSettings(d.settings);
+  return d;
+}
+
 // Un día cambiado en los dos dispositivos: se juntan las comidas de ambos
 export function mergeDay(remote, local) {
   const ids = new Set((remote.entries || []).map((e) => e.id));
