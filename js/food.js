@@ -5,7 +5,8 @@ import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num
 import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
 import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, parseUnit, pluralEs, qtyLabel, recentItems, recipeTotals, unitCode } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
-import { coachNotice, linkNotice } from './account.js';
+import { isLoggedIn, rpc } from './sync.js';
+import { accessState, coachNotice, errorText, linkNotice } from './account.js';
 
 /* ---------- vista: Hoy ---------- */
 
@@ -717,13 +718,45 @@ export async function handleCode(code, scannerSheet) {
   if (S.sheets[S.sheets.length - 1] !== scannerSheet) return;
   if (p && p.hasNutrition) {
     replaceTop({ type: 'food', draft: { ...p, id: null, source: 'off' }, then, note: 'Datos de Open Food Facts. Compáralos con la etiqueta antes de guardar.' });
+    return;
+  }
+  // Base de alimentos de la app: productos que Open Food Facts no tiene y que ha añadido otro usuario
+  if (status) status.textContent = `Código ${code}. Buscando en la base de la app…`;
+  const shared = offline ? null : await sharedFood(code);
+  if (S.sheets[S.sheets.length - 1] !== scannerSheet) return;
+  if (shared) {
+    replaceTop({ type: 'food', draft: { name: shared.name, brand: shared.brand, barcode: code, servingG: shared.serving_g, unitName: shared.unit_name || undefined, unitG: shared.unit_g || undefined, per100: shared.per100, id: null, source: 'comunidad' },
+      then, shared: { code, mine: shared.mine }, shareOffer: shared.mine,
+      note: 'Datos que ha añadido otro usuario de la app (este producto no está en Open Food Facts). Compáralos con la etiqueta antes de guardar.' });
   } else if (p) {
+    // Nombre y marca vienen de Open Food Facts: no se ofrecen para la base de la app (licencia ODbL)
     replaceTop({ type: 'food', draft: { name: p.name, brand: p.brand, barcode: code, servingG: p.servingG, per100: {}, id: null, source: 'etiqueta' }, then, note: 'Open Food Facts conoce el producto pero no sus valores. Cópialos de la etiqueta (por 100 g).' });
   } else {
-    replaceTop({ type: 'food', draft: { name: '', barcode: code, per100: {}, id: null, source: 'etiqueta' }, then,
+    replaceTop({ type: 'food', draft: { name: '', barcode: code, per100: {}, id: null, source: 'etiqueta' }, then, shareOffer: !offline && canShareFoods(),
       note: offline ? 'Sin conexión para consultar Open Food Facts. Puedes copiar los valores de la etiqueta (por 100 g).' : 'Este código no está en Open Food Facts. Copia los valores de la etiqueta (por 100 g) y quedará guardado para la próxima vez.' });
   }
 }
+
+const canShareFoods = () => isLoggedIn() && accessState() === 'active';
+async function sharedFood(code) {
+  if (!canShareFoods()) return null;
+  try { return await rpc('shared_food_get', { p_code: code }); } catch (e) { return null; }
+}
+async function shareFood(f) {
+  try {
+    const r = await rpc('shared_food_put', { p_code: f.barcode, p_name: f.name, p_brand: f.brand || '', p_per100: f.per100, p_serving_g: f.servingG ?? null, p_unit_name: f.unitName ?? null, p_unit_g: f.unitG ?? null });
+    if (r === 'created') toast('Gracias: el producto queda disponible para los demás usuarios');
+    else if (r === 'updated') toast('Producto actualizado en la base de la app');
+  } catch (e) { toast('No se ha podido compartir el producto: ' + errorText(e)); }
+}
+
+SHEETS['food-report'] = {
+  title: () => 'Avisar de un error',
+  render: (s) => `
+    <p class="muted">Cuéntanos qué no coincide con la etiqueta. El equipo de la app lo revisará.</p>
+    <label class="field top-gap"><span>Qué está mal</span><textarea id="fr-msg" rows="3" maxlength="500" placeholder="p. ej. La etiqueta dice 250 kcal, no 300">${esc(s.msg || '')}</textarea></label>
+    <div class="sheet-actions"><button type="button" class="btn primary" data-act="food-report-send">Enviar aviso</button></div>`,
+};
 
 /* Editor de alimento */
 SHEETS.food = {
@@ -751,6 +784,9 @@ SHEETS.food = {
       </div>
       <p class="hint">Con una unidad podrás apuntar «2 huevos» en vez de gramos.</p>
       <label class="field"><span>Código de barras</span><input id="ff-code" type="text" inputmode="numeric" value="${esc(d.barcode || '')}" placeholder="Opcional" autocomplete="off"></label>
+      ${s.shareOffer ? `<label class="check top-gap"><input type="checkbox" id="ff-share" checked> ${s.shared?.mine ? 'Actualizar también el producto en la base de la app' : 'Compartir este producto con los demás usuarios de la app'}</label>
+        <p class="hint">Así quien escanee este código lo encontrará hecho. Se comparten el nombre, la marca y los valores, nunca quién lo ha añadido.</p>` : ''}
+      ${s.shared && !s.shared.mine ? '<p class="hint top-gap"><button type="button" class="link" data-act="food-report">¿No coincide con la etiqueta? Avisar del error</button></p>' : ''}
       <div class="nut-box" role="group" aria-labelledby="nut-box-t">
         <p class="nut-box-title" id="nut-box-t">Información nutricional por 100 g</p>
         ${MACROS.map(nf).join('')}
@@ -798,6 +834,7 @@ export function saveFood(s) {
     && (f.servingG ?? null) === (basic.servingG ?? null)
     && (f.unitG ?? null) === (basic.unitG ?? null) && (f.unitName ?? null) === (basic.unitName ?? null)
     && KEYS.every((k) => (f.per100[k] ?? null) === (basic.per100[k] ?? null));
+  if (s.shareOffer && $('#ff-share')?.checked && /^\d{8,14}$/.test(f.barcode || '')) shareFood(f);
   if (!unchangedBasic) {
     if (!f.id) f.id = uid();
     if (f.source === 'basico') f.source = 'propio';
@@ -1060,6 +1097,15 @@ Object.assign(ACTIONS, {
       const f = getFood(el.dataset.id);
       if (f) pushSheet({ type: 'food', draft: structuredClone(f), then: null });
       return;
+  },
+  'food-report': (el, top) => pushSheet({ type: 'food-report', code: top.shared?.code }),
+  'food-report-send': async (el, top) => {
+    top.msg = $('#fr-msg').value;
+    try {
+      await rpc('shared_food_report', { p_code: top.code, p_reason: top.msg });
+      popSheet();
+      toast('Gracias por avisar');
+    } catch (e) { toast(errorText(e)); }
   },
   'food-save': async (el, top, act) => {
       saveFood(top);

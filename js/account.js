@@ -69,7 +69,8 @@ const ERRORS = {
   bad_date: 'Elige una fecha posterior a hoy.',
   bad_goals: 'Revisa los objetivos: pon al menos uno, solo con números.',
   empty: 'Escribe algo antes de guardar.',
-  violates_check: 'Esa foto no se puede compartir (formato o tamaño).',
+  violates_check: 'Algún dato no es válido (formato o tamaño).',
+  bad_food: 'Revisa los valores: hace falta el valor energético y solo números.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';

@@ -1,6 +1,6 @@
 // Pestaña Administración (solo cuentas de desarrollador): usuarios, códigos de activación y solicitudes.
 // Todo pasa por funciones del servidor que comprueban que quien llama es desarrollador.
-import { $, dateShort, esc, iso, norm, num, plural } from './util.js';
+import { $, dateShort, esc, fmt, iso, norm, num, plural } from './util.js';
 import { S } from './state.js';
 import { ACTIONS, FORMS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
@@ -10,7 +10,7 @@ const FILTERS = [
   ['all', 'Todos'], ['dev', 'Desarrolladores'], ['trainer', 'Entrenadores'], ['client', 'Clientes'],
   ['free', 'Usuarios libres'], ['pending', 'Pendientes'], ['blocked', 'Bloqueados'],
 ];
-const data = { users: null, codes: null, requests: null, fresh: [], error: '' };
+const data = { users: null, codes: null, requests: null, foods: null, fresh: [], error: '' };
 const failed = new Set();
 let loading = false;
 
@@ -18,7 +18,7 @@ async function load(what, force = false) {
   if (!force && (data[what] || failed.has(what) || loading)) return;
   loading = true;
   try {
-    data[what] = await rpc({ users: 'admin_users', codes: 'admin_codes', requests: 'admin_requests' }[what]);
+    data[what] = await rpc({ users: 'admin_users', codes: 'admin_codes', requests: 'admin_requests', foods: 'admin_shared_foods' }[what]);
     data.error = '';
     failed.delete(what);
   } catch (e) {
@@ -125,6 +125,19 @@ function requestsView() {
     ${done.length ? `<h3 class="list-title">Resueltas</h3><ul class="req-list">${done.map(card).join('')}</ul>` : ''}`;
 }
 
+// Base de alimentos de la app: lo que han aportado los usuarios al escanear productos que no están en Open Food Facts
+function foodsView() {
+  const list = data.foods;
+  if (!list) return '<p class="muted">Cargando alimentos…</p>';
+  if (!list.length) return '<p class="empty">Todavía nadie ha compartido ningún producto.</p>';
+  return `
+    <p class="hint">Productos que los usuarios han añadido al escanear códigos que Open Food Facts no tiene. Primero los que tienen avisos de error.</p>
+    <ul class="list top-gap">${list.map((f) => `<li><button type="button" class="row" data-act="adm-food" data-v="${esc(f.barcode)}">
+      <span class="row-main">${esc(f.name)}${f.brand ? ` <small class="muted">${esc(f.brand)}</small>` : ''}${f.hidden ? ' <em class="tag tag-off">oculto</em>' : ''}${Number(f.reports) ? ` <em class="tag tag-danger">${plural(Number(f.reports), 'aviso', 'avisos')}</em>` : ''}</span>
+      <span class="row-sub"><code>${esc(f.barcode)}</code> · ${fmt(f.kcal)} kcal/100 g · ${esc(f.author || 'cuenta borrada')} · ${when(f.updated_at)}</span>
+    </button></li>`).join('')}</ul>`;
+}
+
 export function viewAdmin() {
   const t = tabOf();
   load(t);
@@ -132,10 +145,10 @@ export function viewAdmin() {
   return `
   <header class="page-head"><h1>Administración</h1></header>
   <div class="segmented" role="tablist">
-    ${[['users', 'Usuarios'], ['codes', 'Códigos'], ['requests', `Solicitudes${nPend ? ` (${nPend})` : ''}`]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${t === k}" data-act="adm-tab" data-v="${k}">${l}</button>`).join('')}
+    ${[['users', 'Usuarios'], ['codes', 'Códigos'], ['requests', `Solicitudes${nPend ? ` (${nPend})` : ''}`], ['foods', 'Alimentos']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${t === k}" data-act="adm-tab" data-v="${k}">${l}</button>`).join('')}
   </div>
   ${data.error ? `<div class="notice"><p>${esc(data.error)}</p></div>` : ''}
-  <div class="adm-body">${t === 'users' ? usersView() : t === 'codes' ? codesView() : requestsView()}</div>
+  <div class="adm-body">${t === 'users' ? usersView() : t === 'codes' ? codesView() : t === 'foods' ? foodsView() : requestsView()}</div>
   <button type="button" class="btn ghost wide top-gap" data-act="adm-reload" ${loading ? 'disabled' : ''}>Actualizar</button>`;
 }
 
@@ -164,6 +177,30 @@ SHEETS['admin-user'] = {
       </div>
       <p class="hint">Los clientes se asignan solos cuando un entrenador acepta su solicitud. Si quitas el tipo de entrenador a alguien, sus clientes siguen vinculados 15 días y después quedan sin entrenador. La cuenta solo la puede borrar el propio usuario.</p>
       <div class="sheet-actions"><button type="button" class="btn ${u.blocked ? '' : 'danger ghost'}" data-act="adm-block" data-v="${u.blocked ? 0 : 1}">${u.blocked ? 'Desbloquear acceso' : 'Bloquear acceso'}</button></div>`}`;
+  },
+};
+
+const PER100_L = [['kcal', 'Energía', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['su', 'Azúcares', 'g'], ['f', 'Grasas', 'g'], ['sf', 'Saturadas', 'g'], ['fi', 'Fibra', 'g'], ['sal', 'Sal', 'g']];
+
+SHEETS['admin-food'] = {
+  title: (s) => (data.foods || []).find((f) => f.barcode === s.code)?.name || 'Alimento',
+  render: (s) => {
+    const f = (data.foods || []).find((x) => x.barcode === s.code);
+    if (!f) return '<p class="empty">Ya no existe.</p>';
+    return `
+      <div class="rep">
+        <div class="rep-line"><span class="rep-l">Código</span><span class="rep-v small"><code>${esc(f.barcode)}</code></span></div>
+        <div class="rep-line"><span class="rep-l">Marca</span><span class="rep-v small">${esc(f.brand || '–')}</span></div>
+        <div class="rep-line"><span class="rep-l">Lo añadió</span><span class="rep-v small">${esc(f.author || 'cuenta borrada')}</span></div>
+        <div class="rep-line"><span class="rep-l">Actualizado</span><span class="rep-v small">${when(f.updated_at)}</span></div>
+        ${PER100_L.filter(([k]) => f.per100?.[k] != null).map(([k, l, u]) => `<div class="rep-line"><span class="rep-l">${l}</span><span class="rep-v small">${fmt(f.per100[k], 1)} ${u}</span></div>`).join('')}
+      </div>
+      ${Number(f.reports) ? `<h3 class="list-title">Avisos (${f.reports})</h3><p class="req-msg">${esc(f.reasons || 'Sin comentario')}</p>` : ''}
+      <p class="hint">Ocultarlo hace que nadie lo encuentre al escanear; mostrarlo de nuevo borra los avisos.</p>
+      <div class="sheet-actions">
+        <button type="button" class="btn danger ghost" data-act="adm-food-del">Borrar</button>
+        <button type="button" class="btn ${f.hidden ? 'primary' : 'ghost'}" data-act="adm-food-hide" data-v="${f.hidden ? 0 : 1}">${f.hidden ? 'Mostrar' : 'Ocultar'}</button>
+      </div>`;
   },
 };
 
@@ -200,6 +237,15 @@ FORMS['adm-codes'] = async () => {
 };
 
 Object.assign(ACTIONS, {
+  'adm-food': (el) => pushSheet({ type: 'admin-food', code: el.dataset.v }),
+  'adm-food-hide': async (el, top) => {
+    const hidden = el.dataset.v === '1';
+    if (await act(() => rpc('admin_shared_food_hide', { p_code: top.code, p_hidden: hidden }), hidden ? 'Oculto' : 'Visible de nuevo')) { await load('foods', true); renderSheets(); }
+  },
+  'adm-food-del': (el, top) => pushSheet({
+    type: 'confirm', title: 'Borrar producto', text: 'Se borrará de la base de la app. Quien ya lo tenga guardado en sus alimentos lo conserva.', ok: 'Borrar', danger: true,
+    onOk: async () => { await act(() => rpc('admin_shared_food_delete', { p_code: top.code }), 'Producto borrado'); await load('foods', true); closeSheets(); render(); },
+  }),
   'adm-tab': (el) => { S.ui.atab = el.dataset.v; render(); },
   'adm-filter': (el) => { S.ui.afilter = el.dataset.v; S.ui.more = { ...(S.ui.more || {}), 'admin-users': 0 }; render(); },
   'adm-reload': async () => { await load(tabOf(), true); render(); },
