@@ -560,14 +560,17 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 }
 .sheet-head h2 { text-align: center; font-size: var(--step-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-body {
+  /* Sin -webkit-overflow-scrolling: en iOS, junto con la barra fija de botones, dejaba zonas en negro */
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
 }
 .sheet-sub { color: var(--muted); font-size: var(--step--1); margin-bottom: 10px; }
 .sheet-sub b { color: var(--ink); font-size: var(--step-0); }
-.sheet-actions { display: flex; gap: 10px; margin-top: 18px; position: sticky; bottom: 0; padding-top: 10px; background: var(--bg); }
+.sheet-actions { display: flex; gap: 10px; margin-top: 18px; position: sticky; padding-top: 10px; background: var(--bg);
+  /* Llega hasta el borde de abajo de la hoja, para que no asome por debajo lo que hay detrás */
+  --pad-b: calc(20px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(-1 * var(--pad-b)); padding-bottom: var(--pad-b); margin-bottom: calc(-1 * var(--pad-b)); }
 .sheet-actions .btn { flex: 1; }
 .pick-tools { display: grid; gap: 10px; }
 
@@ -670,20 +673,23 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .wk-sug.up { border-left-color: var(--accent); background: var(--accent-soft); }
 .wk-sug.down { border-left-color: var(--carb); }
 .wk-cfg { border: 0; background: none; padding: 4px 0; margin-top: 4px; color: var(--accent); font-size: 0.75rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-.sets { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.sets { width: 100%; border-collapse: collapse; margin: 8px 0; table-layout: fixed; }
+/* Columnas fijas para que la tabla nunca sea más ancha que la tarjeta */
+.sets th:first-child { width: 40px; }
+.sets th.c-done { width: 46px; }
+.sets th.c-del { width: 30px; }
+.sets.with-rir th.c-rir { width: 50px; }
+.sets input[type="text"] { width: 100%; min-width: 0; }
 .sets th { font-size: 0.75rem; color: var(--muted); font-weight: 700; text-align: center; padding: 2px; }
 .sets td { padding: 3px 2px; text-align: center; }
-.sets td:nth-child(2), .sets td:nth-child(3) { width: 30%; }
 .sets input[type="text"] { min-height: 40px; padding: 6px 8px; text-align: center; font-weight: 700; }
 .sets input::placeholder { color: var(--muted); opacity: 0.6; font-weight: 400; }
 .set-type { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--sunk); font-weight: 700; }
 .warm .set-type { background: var(--carb); color: #fff; border-color: var(--carb); }
 .set-done { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-weight: 800; }
 .set-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.set-del { width: 28px; height: 34px; border: 0; background: none; color: var(--muted); font-size: 18px; }
+.set-del { width: 28px; max-width: 100%; height: 34px; border: 0; background: none; color: var(--muted); font-size: 18px; }
 .sets tr.done input { background: var(--accent-soft); }
-.sets.with-rir td:nth-child(2), .sets.with-rir td:nth-child(3) { width: 26%; }
-.sets td.rir { width: 15%; }
 .sets td.rir input { padding-left: 2px; padding-right: 2px; }
 .sets tr.active td:first-child .set-type { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .step-row td { padding-top: 0; }
@@ -1096,3 +1102,6 @@ body.read-only .fab { display: none; }
 .exp-chg.up { color: var(--accent); }
 .tip .exp-dot { width: 8px; height: 8px; }
 .exp-chart .tip { max-width: 94%; }
+
+/* Con una hoja abierta, la barra de pestañas no desenfoca (en iOS provocaba pantallazos en negro con el teclado) */
+body.sheet-open .tabbar { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface); }

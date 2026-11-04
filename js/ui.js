@@ -115,6 +115,10 @@ export function renderSheets() {
   }
   const def = SHEETS[top.type];
   if (renderedSheet === top && def.keep) return; // hojas que no se repintan (la cámara)
+  // Si se va a repintar con el teclado abierto, primero se cierra: en iOS, quitar el campo con el foco
+  // dejaba la pantalla en negro o el teclado sobre una hoja vacía
+  const focused = document.activeElement;
+  if (focused && focused !== document.body && root.contains(focused)) focused.blur();
   const prevBody = root.querySelector('.sheet-body');
   if (renderedSheet && prevBody) renderedSheet._scroll = prevBody.scrollTop;
   const same = renderedSheet === top;
@@ -215,3 +219,16 @@ export function initEvents() {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   if (mq.addEventListener) mq.addEventListener('change', applyTheme);
 }
+
+// iOS: al cerrar el teclado dentro de una hoja, a veces parte de la hoja se queda sin pintar (en negro).
+// Se fuerza un repintado de la hoja en cuanto no queda ningún campo con el foco.
+if (typeof document !== 'undefined') document.addEventListener('focusout', (ev) => {
+  if (!ev.target?.closest?.('#sheet-root')) return;
+  setTimeout(() => {
+    if (document.activeElement?.matches?.('input, textarea, select')) return;
+    const sheet = document.querySelector('#sheet-root .sheet');
+    if (!sheet) return;
+    sheet.style.transform = 'translateZ(0)';
+    requestAnimationFrame(() => { sheet.style.transform = ''; });
+  }, 60);
+});

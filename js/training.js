@@ -214,7 +214,7 @@ SHEETS.workout = {
         ${sug ? `<p class="wk-sug ${sug.type}">${sug.text}</p>` : ''}
         <button type="button" class="wk-cfg" data-act="ex-cfg" data-id="${esc(we.exId)}">Rango ${cfg.min}–${cfg.max} reps · sube de ${fmt(cfg.inc, 2)} en ${fmt(cfg.inc, 2)} kg</button>
         <table class="sets${showRir ? ' with-rir' : ''}">
-          <thead><tr><th scope="col">Serie</th><th scope="col">Kg</th><th scope="col">Reps</th>${showRir ? '<th scope="col" title="Repeticiones en reserva">RIR</th>' : ''}<th scope="col"><span class="sr">Hecha</span></th><th></th></tr></thead>
+          <thead><tr><th scope="col">Serie</th><th scope="col">Kg</th><th scope="col">Reps</th>${showRir ? '<th scope="col" class="c-rir" title="Repeticiones en reserva">RIR</th>' : ''}<th scope="col" class="c-done"><span class="sr">Hecha</span></th><th class="c-del"><span class="sr">Quitar</span></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div class="wk-ex-foot">
@@ -832,11 +832,19 @@ Object.assign(ACTIONS, {
   'wk-del': async (el, top) => {
       const id = top.id;
       const old = S.workouts[id];
-      closeSheets();
-      if (!old) return;
-      undoable('Entrenamiento borrado',
-        () => { delete S.workouts[id]; saveWorkout(id); render(); },
-        () => { S.workouts[id] = old; saveWorkout(id); render(); });
+      if (!old) { closeSheets(); return; }
+      const remove = () => {
+        closeSheets();
+        undoable('Entrenamiento borrado',
+          () => { delete S.workouts[id]; saveWorkout(id); render(); },
+          () => { S.workouts[id] = old; saveWorkout(id); render(); });
+      };
+      // Con series hechas se pide confirmación: el botón está junto a «Terminar»
+      const done = old.exercises.reduce((a, we) => a + we.sets.filter((x) => x.done).length, 0);
+      if (!done) { remove(); return; }
+      pushSheet({ type: 'confirm', title: 'Borrar entrenamiento', ok: 'Borrar', danger: true,
+        text: `Se borrará «${old.name || 'Entrenamiento'}» con ${done === 1 ? 'una serie hecha' : `${done} series hechas`}. Podrás deshacerlo justo después.`,
+        onOk: remove });
   },
   'ex-cfg': async (el, top, act) => {
       pushSheet({ type: 'ex-cfg', id: el.dataset.id });
