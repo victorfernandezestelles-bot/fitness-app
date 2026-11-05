@@ -97,7 +97,7 @@ const MIGRATIONS = {
         exercises: (Array.isArray(w?.exercises) ? w.exercises : []).map((we) => ({
           ...we,
           sets: (Array.isArray(we.sets) ? we.sets : []).map((st) => ({
-            ...st, kg: numOrNull(st.kg), reps: numOrNull(st.reps), t: st.t === 'w' ? 'w' : 'n', done: !!st.done,
+            ...st, kg: numOrNull(st.kg), reps: numOrNull(st.reps), t: ['w', 'd', 'rp'].includes(st.t) ? st.t : 'n', done: !!st.done,
           })),
         })),
       };

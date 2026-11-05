@@ -125,9 +125,15 @@ const COMPOUND = new Set(('press-banca press-inclinado-barra press-mancuernas pr
   + 'press-hombro-manc press-militar-smith press-hombro-maquina press-cerrado sentadilla sentadilla-frontal sentadilla-hack '
   + 'sentadilla-goblet prensa bulgara zancadas peso-muerto-rumano good-morning hip-thrust hip-thrust-maquina').split(' '));
 
+// Trabajo de agarre: el antebrazo suma 0,25 por serie en jalones y remos (sostiene la carga, pero
+// trabaja bastante menos que en un curl). Donde ya cuenta como principal o secundario no se añade.
+const GRIP = new Set(('jalon-pecho jalon-estrecho jalon-neutro remo-barra remo-mancuerna remo-polea remo-unilateral-polea '
+  + 'remo-abierto-polea remo-maquina remo-t').split(' '));
+export const GRIP_FACTOR = 0.25;
+
 const split = (s) => (s ? s.split(' ') : []);
 export const EXERCISES = E.map(([id, name, p, s]) => ({
-  id: 'x-' + id, name, primary: split(p), secondary: split(s), builtin: true, compound: COMPOUND.has(id),
+  id: 'x-' + id, name, primary: split(p), secondary: split(s), grip: GRIP.has(id) ? ['antebrazo'] : [], builtin: true, compound: COMPOUND.has(id),
 }));
 export const EXERCISES_BY_ID = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 

@@ -7,7 +7,7 @@ import { MUSCLE_NAME } from './exercises.js';
 import { bodyPair } from './bodymap.js';
 import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, num, parseISO, plural, today } from './util.js';
 import { MEALS, S } from './state.js';
-import { MEASURES, dayOf, exName, goalsFor, hasTrainGoals, isEffective, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
+import { MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { mapLegend } from './training.js';
 import { drawSeries } from './progress.js';
@@ -379,9 +379,9 @@ SHEETS['fc-workout'] = {
         <h3 class="list-title">Ejercicios</h3>
         <ul class="fc-exs">${w.exercises.map((we) => `<li>
           <b>${esc(exName(we))}</b>
-          <span>${we.sets.map((x) => `<span class="fc-set${x.t === 'w' ? ' warm' : ''}${x.t === 'w' || isEffective(x) ? '' : ' undone'}">${x.t === 'w' ? 'C ' : ''}${setText(x)}${x.rir != null ? ` <small>RIR ${x.rir}</small>` : ''}</span>`).join('')}</span>
+          <span>${we.sets.map((x) => `<span class="fc-set${x.t === 'w' ? ' warm' : ''}${isSeg(x) ? ' seg' : ''}${x.t === 'w' || isEffective(x) ? '' : ' undone'}">${x.t === 'w' ? 'C ' : isSeg(x) ? `↳ ${SEG_LABEL[x.t]} ` : ''}${setText(x)}${x.rir != null ? ` <small>RIR ${x.rir}</small>` : ''}</span>`).join('')}</span>
         </li>`).join('')}</ul>
-        <p class="hint">C = serie de calentamiento. Las series tachadas no se marcaron como hechas.</p>`;
+        <p class="hint">C = serie de calentamiento. DS = bajada de un dropset y RP = bloque de un rest-pause, de la serie anterior. Las series tachadas no se marcaron como hechas.</p>`;
     });
   },
 };

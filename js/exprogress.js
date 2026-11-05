@@ -29,7 +29,8 @@ function sessions(exId) {
       date: h.date,
       e1rm: h.best,
       peso: kgs.length && Math.max(...kgs) > 0 ? Math.max(...kgs) : null,
-      vol: sets.reduce((a, s) => a + (s.kg || 0) * (s.reps || 0), 0) || null,
+      // El volumen incluye las bajadas y los bloques (dropset, rest-pause); el resto, solo las series principales
+      vol: (h.all || sets).filter(isEffective).reduce((a, s) => a + (s.kg || 0) * (s.reps || 0), 0) || null,
       reps: sets.length ? Math.max(...sets.map((s) => s.reps || 0)) || null : null,
       top: bestSet ? `${bestSet.kg ? fmt(bestSet.kg, 2) + ' kg' : 'sin peso'} × ${bestSet.reps ?? '–'}` : '',
     };

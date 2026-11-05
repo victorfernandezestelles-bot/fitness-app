@@ -3,7 +3,7 @@ import { TEMPLATES } from './templates.js';
 import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
 import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
-import { allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, lastPerformance, mondayOf, musclesText, nextInRotation, setText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
+import { SEG_LABEL, allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
 import { bar } from './food.js';
 import { viewCardio } from './cardio.js';
@@ -177,9 +177,10 @@ SHEETS.workout = {
       // Vista compacta: los ejercicios terminados se pliegan
       if (allDone && !s.open?.[i]) {
         const work = we.sets.filter((x) => x.t !== 'w');
+        const nMain = work.filter((x) => !isSeg(x)).length;
         return `<section class="wk-ex folded${ssCls}">${ssTag}${head}
           <button type="button" class="wk-fold" data-act="wk-ex-toggle" data-i="${i}">
-            <span>✓ ${work.length} ${work.length === 1 ? 'serie' : 'series'} · ${work.map(setText).join(' · ')}</span><span class="wk-fold-more">Ver</span>
+            <span>✓ ${nMain} ${nMain === 1 ? 'serie' : 'series'} · ${setsText(work)}</span><span class="wk-fold-more">Ver</span>
           </button>
         </section>`;
       }
@@ -187,11 +188,15 @@ SHEETS.workout = {
       let n = 0;
       const rows = we.sets.map((st, j) => {
         const warm = st.t === 'w';
-        if (!warm) n++;
-        let ph = !warm && last ? last.sets[n - 1] || last.sets[last.sets.length - 1] : null;
+        const seg = isSeg(st);
+        if (!warm && !seg) n++;
+        // Las bajadas y los bloques se apuntan a mano: sin sugerencia
+        let ph = !warm && !seg && last ? last.sets[n - 1] || last.sets[last.sets.length - 1] : null;
         if (ph && sug?.type === 'up') ph = { kg: sug.kg, reps: cfg.min };
-        const row = `<tr class="${st.done ? 'done' : ''}${warm ? ' warm' : ''}${j === active ? ' active' : ''}">
-          <td><button type="button" class="set-type" data-act="set-type" data-i="${i}" data-j="${j}" aria-label="Serie ${warm ? 'de calentamiento' : n}. Toca para cambiar el tipo">${warm ? 'C' : n}</button></td>
+        const label = warm ? 'C' : seg ? `<span aria-hidden="true">↳</span>${SEG_LABEL[st.t]}` : n;
+        const aria = warm ? 'Serie de calentamiento' : seg ? (st.t === 'd' ? `Bajada del dropset de la serie ${n}` : `Bloque del rest-pause de la serie ${n}`) : `Serie ${n}`;
+        const row = `<tr class="${st.done ? 'done' : ''}${warm ? ' warm' : ''}${seg ? ` seg seg-${st.t}` : ''}${j === active ? ' active' : ''}">
+          <td><button type="button" class="set-type" data-act="set-type" data-i="${i}" data-j="${j}" aria-label="${aria}. Toca para cambiar el tipo">${label}</button></td>
           <td><input type="text" inputmode="decimal" data-input="set-kg" data-i="${i}" data-j="${j}" value="${inputVal(st.kg, 2)}" placeholder="${ph ? inputVal(ph.kg, 2) : 'kg'}" aria-label="Kilos"></td>
           <td><input type="text" inputmode="numeric" data-input="set-reps" data-i="${i}" data-j="${j}" value="${st.reps ?? ''}" placeholder="${ph ? ph.reps ?? '' : 'reps'}" aria-label="Repeticiones"></td>
           ${showRir ? `<td class="rir"><input type="text" inputmode="numeric" data-input="set-rir" data-i="${i}" data-j="${j}" value="${st.rir ?? ''}" placeholder="–" aria-label="RIR, repeticiones en reserva"></td>` : ''}
@@ -210,7 +215,7 @@ SHEETS.workout = {
         <p class="wk-muscles">${esc(musclesText(ex))}</p>
         ${fixedNote ? `<p class="wk-note"><b>Nota:</b> ${esc(fixedNote)}</p>` : ''}
         ${we.note ? `<p class="wk-note today"><b>Hoy:</b> ${esc(we.note)}</p>` : ''}
-        ${last ? `<p class="wk-last">Última vez (${dateShort(last.date)}): ${last.sets.map(setText).join(' · ')}</p>` : ''}
+        ${last ? `<p class="wk-last">Última vez (${dateShort(last.date)}): ${setsText(last.all)}</p>` : ''}
         ${sug ? `<p class="wk-sug ${sug.type}">${sug.text}</p>` : ''}
         <button type="button" class="wk-cfg" data-act="ex-cfg" data-id="${esc(we.exId)}">Rango ${cfg.min}–${cfg.max} reps · sube de ${fmt(cfg.inc, 2)} en ${fmt(cfg.inc, 2)} kg</button>
         <table class="sets${showRir ? ' with-rir' : ''}">
@@ -219,6 +224,8 @@ SHEETS.workout = {
         </table>
         <div class="wk-ex-foot">
           <button type="button" class="btn ghost small" data-act="set-add" data-i="${i}">+ Serie</button>
+          <button type="button" class="btn ghost small" data-act="seg-add" data-t="d" data-i="${i}" ${segAnchor(we.sets) < 0 ? 'disabled' : ''}>+ Dropset</button>
+          <button type="button" class="btn ghost small" data-act="seg-add" data-t="rp" data-i="${i}" ${segAnchor(we.sets) < 0 ? 'disabled' : ''}>+ Rest-pause</button>
           ${allDone ? `<button type="button" class="btn ghost small" data-act="wk-ex-toggle" data-i="${i}">Plegar</button>` : ''}
         </div>
       </section>`;
@@ -237,7 +244,7 @@ SHEETS.workout = {
       </div>
       ${exs || '<p class="empty">Añade el primer ejercicio. Si lo has hecho antes, verás lo que levantaste la última vez.</p>'}
       <button type="button" class="btn wide" data-act="wk-ex-add">+ Añadir ejercicio</button>
-      <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen.${showRir ? ' RIR: repeticiones que te quedaban en reserva (0 = al fallo).' : ''}</p>
+      <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen. «+ Dropset» y «+ Rest-pause» añaden una bajada o un bloque debajo de la última serie hecha: suman al volumen, pero no al 1RM ni a la progresión.${showRir ? ' RIR: repeticiones que te quedaban en reserva (0 = al fallo).' : ''}</p>
       <div class="sheet-actions">
         <button type="button" class="btn danger ghost" data-act="wk-del">Borrar</button>
         ${w.exercises.length && !w.routineId ? '<button type="button" class="btn ghost" data-act="wk-to-routine">Crear rutina</button>' : ''}
@@ -292,6 +299,13 @@ SHEETS['wk-summary'] = {
       </div>`;
   },
 };
+
+// Serie a la que se engancha un dropset o un rest-pause: la última hecha que no sea de calentamiento
+function segAnchor(sets) {
+  for (let j = sets.length - 1; j >= 0; j--) if (sets[j].done && sets[j].t !== 'w') return j;
+  return -1;
+}
+const RP_REST = 30; // pausa entre bloques de un rest-pause, en segundos
 
 // Letra de cada superserie (A, B, C…) por orden de aparición
 function supersetLetters(w) {
@@ -491,7 +505,7 @@ SHEETS['ex-history'] = {
       ${hist.length ? (() => {
         const pl = pageList('hist-' + s.id, hist, 15, (h) => `<li class="row static hist">
           <span class="row-main">${dayLabel(h.date)}</span>
-          <span class="row-sub">${h.sets.map(setText).join(' · ')}</span>
+          <span class="row-sub">${setsText(h.all)}</span>
           <span class="row-side">${h.best ? fmt(h.best, 1) : '–'} <small>1RM est.</small></span>
         </li>`);
         return `<h3 class="list-title">Historial</h3><ul class="list">${pl.html}</ul>${pl.more}`;
@@ -601,9 +615,11 @@ export async function exportCsvEntrenos() {
       for (const st of we.sets) {
         if (!isEffective(st) && st.t !== 'w') continue;
         const warm = st.t === 'w';
-        if (!warm) n++;
-        rows.push([w.date, w.name, exName(we), warm ? '' : n, warm ? 'calentamiento' : 'efectiva', csvNum(st.kg, 2), st.reps ?? '', st.rir ?? '',
-          csvNum(warm ? null : e1rm(st.kg, st.reps), 1), (ex?.primary || []).map((m) => MUSCLE_NAME[m]).join(', '), we.ss ? 'sí' : '', we.note || ''].map(csvText).join(';'));
+        const seg = isSeg(st);
+        if (!warm && !seg) n++;
+        const tipo = warm ? 'calentamiento' : st.t === 'd' ? 'dropset' : st.t === 'rp' ? 'rest-pause' : 'efectiva';
+        rows.push([w.date, w.name, exName(we), warm ? '' : n, tipo, csvNum(st.kg, 2), st.reps ?? '', st.rir ?? '',
+          csvNum(warm || seg ? null : e1rm(st.kg, st.reps), 1), (ex?.primary || []).map((m) => MUSCLE_NAME[m]).join(', '), we.ss ? 'sí' : '', we.note || ''].map(csvText).join(';'));
       }
     }
   }
@@ -665,11 +681,12 @@ export function restEl() {
   return el;
 }
 
-export function startRest(exId, name) {
+// secs: pausa fija (rest-pause), que no cambia el descanso guardado del ejercicio
+export function startRest(exId, name, secs) {
   unlockAudio();
-  const total = S.settings.restByEx?.[exId] || S.settings.rest || 120;
+  const total = secs || S.settings.restByEx?.[exId] || S.settings.rest || 120;
   if (rest?.timer) clearInterval(rest.timer);
-  rest = { end: Date.now() + total * 1000, total, exId, name, finished: false, timer: null };
+  rest = { end: Date.now() + total * 1000, total, exId, name, short: !!secs, finished: false, timer: null };
   rest.timer = setInterval(tickRest, 250);
   saveRestState();
   updateWake();
@@ -680,9 +697,11 @@ export function adjustRest(delta) {
   if (!rest) return;
   rest.end += delta * 1000;
   rest.total = Math.max(15, rest.total + delta);
-  // Recuerda el nuevo tiempo para este ejercicio
-  S.settings.restByEx = { ...(S.settings.restByEx || {}), [rest.exId]: rest.total };
-  saveSettings();
+  // Recuerda el nuevo tiempo para este ejercicio (no si es la pausa corta del rest-pause)
+  if (!rest.short) {
+    S.settings.restByEx = { ...(S.settings.restByEx || {}), [rest.exId]: rest.total };
+    saveSettings();
+  }
   if (rest.end <= Date.now()) rest.end = Date.now() + 1000;
   rest.finished = false;
   saveRestState();
@@ -718,7 +737,7 @@ export function drawRest() {
   const html = rest.finished
     ? `<div class="rest-main"><span class="rest-label">Descanso terminado</span><span class="rest-time">¡Siguiente serie!</span></div>
        <button type="button" class="rest-btn" data-act="rest-skip">Cerrar</button>`
-    : `<div class="rest-main"><span class="rest-label">Descanso · ${esc(rest.name)}</span><span class="rest-time">${restLabel(left)}</span></div>
+    : `<div class="rest-main"><span class="rest-label">${rest.short ? 'Pausa rest-pause' : 'Descanso'} · ${esc(rest.name)}</span><span class="rest-time">${restLabel(left)}</span></div>
        <button type="button" class="rest-btn" data-act="rest-add" data-d="-15" aria-label="Quitar 15 segundos">−15</button>
        <button type="button" class="rest-btn" data-act="rest-add" data-d="15" aria-label="Añadir 15 segundos">+15</button>
        <button type="button" class="rest-btn" data-act="rest-skip">Saltar</button>`;
@@ -732,7 +751,7 @@ export function drawRest() {
 // El descanso se guarda para seguir contando aunque se cierre la app
 export function saveRestState() {
   try {
-    if (rest) localStorage.setItem('rest', JSON.stringify({ end: rest.end, total: rest.total, exId: rest.exId, name: rest.name }));
+    if (rest) localStorage.setItem('rest', JSON.stringify({ end: rest.end, total: rest.total, exId: rest.exId, name: rest.name, short: !!rest.short }));
     else localStorage.removeItem('rest');
   } catch (e) { /* sin almacenamiento */ }
 }
@@ -784,11 +803,28 @@ Object.assign(ACTIONS, {
   'set-add': async (el, top, act) => {
       const w = S.workouts[top.id];
       const we = w.exercises[Number(el.dataset.i)];
-      const prev = we.sets[we.sets.length - 1];
+      const prev = [...we.sets].reverse().find((x) => !isSeg(x));
       we.sets.push({ kg: prev ? prev.kg : null, reps: prev ? prev.reps : null, t: 'n', done: false });
       saveWorkout(w.id);
       renderSheets();
       return;
+  },
+  // Dropset o rest-pause: una fila debajo de la última serie hecha (detrás de sus bajadas o bloques)
+  'seg-add': async (el, top) => {
+      const w = S.workouts[top.id];
+      const we = w?.exercises[Number(el.dataset.i)];
+      if (!we) return;
+      const t = el.dataset.t === 'rp' ? 'rp' : 'd';
+      let at = segAnchor(we.sets);
+      if (at < 0) { toast('Marca primero como hecha la serie a la que va.'); return; }
+      while (we.sets[at + 1] && isSeg(we.sets[at + 1])) at++;
+      we.sets.splice(at + 1, 0, { kg: null, reps: null, t, done: false });
+      saveWorkout(w.id);
+      if (!w.end) {
+        if (t === 'rp') startRest(we.exId, exName(we), RP_REST);
+        else stopRest();
+      }
+      renderSheets();
   },
   'wk-ex-del': async (el, top) => {
       const fromMenu = top.type === 'wk-ex-menu';
@@ -802,7 +838,7 @@ Object.assign(ACTIONS, {
   },
   'wk-to-routine': async (el, top, act) => {
       const w = S.workouts[top.id];
-      const items = w.exercises.map((we) => ({ exId: we.exId, sets: Math.max(1, we.sets.filter((x) => x.t !== 'w').length) }));
+      const items = w.exercises.map((we) => ({ exId: we.exId, sets: Math.max(1, we.sets.filter((x) => x.t !== 'w' && !isSeg(x)).length) }));
       pushSheet({ type: 'routine', isNew: true, draft: { id: uid(), name: w.name === 'Entrenamiento' ? '' : w.name, items } });
       return;
   },
@@ -963,9 +999,21 @@ const multi_set_type = async (el, top, act) => {
       const we = w?.exercises[i];
       if (!we) return;
       const st = we.sets[j];
-      if (act === 'set-type') st.t = st.t === 'w' ? 'n' : 'w';
-      else if (act === 'set-del') we.sets.splice(j, 1);
-      else {
+      if (!st) return;
+      if (act === 'set-type') st.t = isSeg(st) ? (st.t === 'd' ? 'rp' : 'd') : st.t === 'w' ? 'n' : 'w';
+      else if (act === 'set-del') {
+        // Una serie se quita junto con sus bajadas o bloques
+        let k = 1;
+        if (!isSeg(st)) while (we.sets[j + k] && isSeg(we.sets[j + k])) k++;
+        if (k === 1) we.sets.splice(j, 1);
+        else {
+          const old = we.sets.slice(j, j + k);
+          undoable('Serie quitada con sus bajadas o bloques',
+            () => { we.sets.splice(j, k); saveWorkout(w.id); renderSheets(); },
+            () => { we.sets.splice(j, 0, ...old); saveWorkout(w.id); renderSheets(); });
+          return;
+        }
+      } else {
         st.done = !st.done;
         // Al marcarla hecha sin datos, copia lo de la última vez
         if (st.done) {
@@ -974,7 +1022,10 @@ const multi_set_type = async (el, top, act) => {
           if (st.kg == null && kgIn) st.kg = num(kgIn.placeholder);
           if (st.reps == null && repIn) { const r = num(repIn.placeholder); st.reps = r == null ? null : Math.round(r); }
           const nextEx = w.exercises[i + 1];
-          if (we.ss && nextEx && nextEx.ss === we.ss) toast(`Superserie: ahora ${exName(nextEx)}`);
+          const nextSet = we.sets[j + 1];
+          // Si después viene otro bloque de rest-pause sin hacer, toca la pausa corta
+          if (nextSet && nextSet.t === 'rp' && !nextSet.done) startRest(we.exId, exName(we), RP_REST);
+          else if (we.ss && nextEx && nextEx.ss === we.ss) toast(`Superserie: ahora ${exName(nextEx)}`);
           else startRest(we.exId, exName(we));
         }
       }

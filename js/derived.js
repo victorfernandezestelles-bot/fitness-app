@@ -1,5 +1,5 @@
 import { BASICS, BASICS_BY_ID, mult, scale, sumNut } from './nutrients.js';
-import { EXERCISES, EXERCISES_BY_ID, MUSCLES, MUSCLE_NAME, defaultCfg, e1rm } from './exercises.js';
+import { EXERCISES, EXERCISES_BY_ID, GRIP_FACTOR, MUSCLES, MUSCLE_NAME, defaultCfg, e1rm } from './exercises.js';
 import { $, addDays, fmt, norm, parseISO, today } from './util.js';
 import { S } from './state.js';
 
@@ -200,13 +200,64 @@ export const exName = (we) => getEx(we.exId)?.name || we.name || 'Ejercicio borr
 export const mondayOf = (s) => { const d = parseISO(s); return addDays(s, -((d.getDay() + 6) % 7)); };
 export const emptySet = () => ({ kg: null, reps: null, t: 'n', done: false });
 export const isEffective = (st) => st.t !== 'w' && (st.done || (st.reps || 0) > 0);
+// Bajadas de un dropset ('d') y bloques de un rest-pause ('rp'): van debajo de su serie y no son series nuevas
+export const isSeg = (st) => st.t === 'd' || st.t === 'rp';
+// Series efectivas «de verdad» (sin calentamiento ni bajadas o bloques): las que cuentan para el 1RM, la progresión y «la última vez»
+export const isMainSet = (st) => isEffective(st) && !isSeg(st);
+export const SEG_LABEL = { d: 'DS', rp: 'RP' };
+
+// Valor de las series de un ejercicio para el recuento por músculo: 1 por serie,
+// +0,5 por cada bajada de dropset y, en rest-pause, +0,5 el 2.º bloque y +0,25 cada uno de los siguientes
+export function setLoad(sets) {
+  let load = 0;
+  let rp = 0;
+  for (const st of sets || []) {
+    if (st.t === 'w') continue;
+    if (!isSeg(st)) { rp = 0; if (isEffective(st)) load += 1; continue; }
+    if (!isEffective(st)) continue;
+    if (st.t === 'd') load += 0.5;
+    else { rp++; load += rp === 1 ? 0.5 : 0.25; }
+  }
+  return load;
+}
+
+// Músculos que trabajan el agarre en este ejercicio (siempre según la ficha de la app, aunque se hayan editado los músculos)
+export function gripOf(exId, ex) {
+  const g = EXERCISES_BY_ID[exId]?.grip || [];
+  return ex ? g.filter((m) => !ex.primary.includes(m) && !ex.secondary.includes(m)) : g;
+}
+
+// Suma al recuento por músculo las series de un ejercicio
+function addLoad(vol, ex, exId, load, byMuscle, name) {
+  const add = (m, v) => {
+    vol[m] = (vol[m] || 0) + v;
+    if (byMuscle) byMuscle[m][name] = (byMuscle[m][name] || 0) + v;
+  };
+  for (const m of ex.primary) add(m, load);
+  for (const m of ex.secondary) add(m, load / 2);
+  for (const m of gripOf(exId, ex)) add(m, load * GRIP_FACTOR);
+}
+
+// Texto de unas series con sus bajadas y bloques: «25×7 (DS 20×6, 15×5)» o «60×10 (RP +4 +3)»
+export function setsText(sets) {
+  const out = [];
+  for (const st of sets || []) {
+    const last = out[out.length - 1];
+    if (!isSeg(st) || !last) { out.push({ st, text: setText(st), groups: [] }); continue; }
+    let g = last.groups[last.groups.length - 1];
+    if (!g || g.t !== st.t) { g = { t: st.t, items: [] }; last.groups.push(g); }
+    g.items.push(st.t === 'rp' && (st.kg == null || st.kg === last.st.kg) ? `+${st.reps ?? '–'}` : st.t === 'rp' ? `+${setText(st)}` : setText(st));
+  }
+  return out.map((p) => p.text + p.groups.map((g) => ` (${SEG_LABEL[g.t]} ${g.items.join(g.t === 'rp' ? ' ' : ', ')})`).join('')).join(' · ');
+}
 export const workoutsSorted = () => Object.values(S.workouts).sort((a, b) => (b.date + (b.start || '')).localeCompare(a.date + (a.start || '')));
 export const setText = (st) => `${st.kg == null ? '–' : fmt(st.kg, 2)}×${st.reps == null ? '–' : st.reps}`;
 export const musclesText = (ex) => {
   if (!ex) return '';
   const p = ex.primary.map((m) => MUSCLE_NAME[m]).join(', ');
   const s = ex.secondary.map((m) => MUSCLE_NAME[m]).join(', ');
-  return p + (s ? ` · también ${s.toLowerCase()}` : '');
+  const g = gripOf(ex.id, ex).map((m) => MUSCLE_NAME[m]).join(', ');
+  return p + (s ? ` · también ${s.toLowerCase()}` : '') + (g ? ` · agarre: ${g.toLowerCase()}` : '');
 };
 
 export function workoutStats(w) {
@@ -215,7 +266,7 @@ export function workoutStats(w) {
   for (const we of w.exercises) {
     for (const st of we.sets) {
       if (!isEffective(st)) continue;
-      sets++;
+      if (!isSeg(st)) sets++;
       tonnage += (st.kg || 0) * (st.reps || 0);
     }
   }
@@ -233,12 +284,10 @@ export function weekVolume(monday) {
     sessions++;
     for (const we of w.exercises) {
       const ex = getEx(we.exId);
-      const n = we.sets.filter(isEffective).length;
+      const n = setLoad(we.sets);
       if (!ex || !n) continue;
-      sets += n;
-      const name = exName(we);
-      for (const m of ex.primary) { vol[m] += n; byMuscle[m][name] = (byMuscle[m][name] || 0) + n; }
-      for (const m of ex.secondary) { vol[m] += n / 2; byMuscle[m][name] = (byMuscle[m][name] || 0) + n / 2; }
+      sets += we.sets.filter(isMainSet).length;
+      addLoad(vol, ex, we.exId, n, byMuscle, exName(we));
     }
   }
   return { vol, byMuscle, sessions, sets };
@@ -250,8 +299,8 @@ export function lastPerformance(exId, current) {
     if (current && (w.id === current.id || w.date > current.date)) continue;
     const we = w.exercises.find((x) => x.exId === exId);
     if (!we) continue;
-    const sets = we.sets.filter(isEffective);
-    if (sets.length) return { date: w.date, sets };
+    const sets = we.sets.filter(isMainSet);
+    if (sets.length) return { date: w.date, sets, all: we.sets.filter(isEffective) };
   }
   return null;
 }
@@ -261,14 +310,14 @@ export function exerciseHistory(exId) {
   for (const w of workoutsSorted()) {
     for (const we of w.exercises) {
       if (we.exId !== exId) continue;
-      const sets = we.sets.filter(isEffective);
+      const sets = we.sets.filter(isMainSet);
       if (!sets.length) continue;
       let best = null;
       for (const st of sets) {
         const v = e1rm(st.kg, st.reps);
         if (v != null && (best == null || v > best)) best = v;
       }
-      out.push({ date: w.date, wid: w.id, sets, best });
+      out.push({ date: w.date, wid: w.id, sets, all: we.sets.filter(isEffective), best });
     }
   }
   return out;
@@ -480,10 +529,10 @@ export function workoutVolume(w) {
   const prim = new Set();
   for (const we of w.exercises || []) {
     const ex = getEx(we.exId);
-    const n = we.sets.filter(isEffective).length;
+    const n = setLoad(we.sets);
     if (!ex || !n) continue;
-    for (const m of ex.primary) { vol[m] = (vol[m] || 0) + n; prim.add(m); }
-    for (const m of ex.secondary) vol[m] = (vol[m] || 0) + n / 2;
+    addLoad(vol, ex, we.exId, n);
+    for (const m of ex.primary) prim.add(m);
   }
   return { vol, prim };
 }
