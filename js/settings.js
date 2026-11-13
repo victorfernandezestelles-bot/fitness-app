@@ -107,7 +107,7 @@ export function viewAjustes() {
 
   <section class="card" id="aj-datos">
     <div class="card-head"><h2>Tus datos</h2></div>
-    <p class="muted">Se guardan solo en este teléfono: ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
+    <p class="muted">En este teléfono hay ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
       ${last ? `Última copia: ${dateLong(last.slice(0, 10))}.` : 'Aún no has guardado ninguna copia.'}</p>
     <div class="stack">
       <button type="button" class="btn" data-act="export-json">Guardar copia completa (.json)</button>

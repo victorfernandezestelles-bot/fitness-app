@@ -1,8 +1,8 @@
 // Fotos de progreso privadas: se guardan solo en el teléfono, aparte de los datos y de su copia .json.
 // Si hay entrenador, el usuario puede compartir sesiones concretas (supabase/007-fotos.sql): solo esas se suben.
 import * as store from './store.js';
-import { $, addDays, dateLong, dateShort, deliverFile, esc, fmt, parseISO, plural, today, uid } from './util.js';
-import { S } from './state.js';
+import { $, addDays, dateLong, dateShort, deliverFile, esc, fmt, isDate, isImageData, parseISO, plain, plural, today, uid } from './util.js';
+import { S, SAVED } from './state.js';
 import { ACTIONS, CHANGES, SHEETS, popSheet, popTo, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
 import { accessState, errorText, myProfile } from './account.js';
@@ -12,6 +12,8 @@ const POSE_NAME = Object.fromEntries(POSES);
 
 let sets = null; // [{ id, date, poses: [...], thumbs: {pose: dataURL} }] ordenadas de la más antigua a la más reciente
 const imgCache = new Map();
+// Al borrar todos los datos (o la cuenta) no debe quedar ninguna foto en memoria
+SAVED.push((key) => { if (key === '!wipe') { sets = null; imgCache.clear(); } });
 
 export async function loadPhotoSets(force = false) {
   if (sets && !force) return sets;
@@ -60,7 +62,7 @@ export async function fillPhotoCard() {
   const last = list[list.length - 1];
   el.innerHTML = `
     ${last ? `<p class="muted">${plural(list.length, 'sesión de fotos', 'sesiones de fotos')} · la última del ${dateShort(last.date)}</p>
-      <div class="ph-row">${POSES.filter(([p]) => last.thumbs?.[p]).map(([p, l]) => `<figure><img src="${last.thumbs[p]}" alt="${l}, ${dateShort(last.date)}"><figcaption>${l}</figcaption></figure>`).join('')}</div>`
+      <div class="ph-row">${POSES.filter(([p]) => last.thumbs?.[p]).map(([p, l]) => `<figure><img src="${esc(last.thumbs[p])}" alt="${l}, ${dateShort(last.date)}"><figcaption>${l}</figcaption></figure>`).join('')}</div>`
       : '<p class="muted">Frente, lado y espalda cada pocas semanas, con la misma luz y a la misma hora. Se guardan solo en este teléfono y no salen en la copia normal de tus datos.</p>'}
     <div class="btn-row${list.length ? ' two' : ''} top-gap">
       <button type="button" class="btn" data-act="ph-new">Añadir fotos</button>
@@ -75,7 +77,7 @@ SHEETS['photo-new'] = {
     <label class="field"><span>Fecha</span><input id="ph-date" type="date" value="${s.date}" max="${today()}" data-change="ph-date"></label>
     <div class="ph-slots">${POSES.map(([p, l]) => `
       <label class="ph-slot${s.picks[p] ? ' has' : ''}">
-        ${s.picks[p] === 'busy' ? '<span class="muted">Preparando…</span>' : s.picks[p] ? `<img src="${s.picks[p].thumb}" alt="${l}">` : '<span class="ph-plus" aria-hidden="true">+</span>'}
+        ${s.picks[p] === 'busy' ? '<span class="muted">Preparando…</span>' : s.picks[p] ? `<img src="${esc(s.picks[p].thumb)}" alt="${l}">` : '<span class="ph-plus" aria-hidden="true">+</span>'}
         <span class="ph-pose">${l}</span>
         <input type="file" accept="image/*" data-change="ph-pick" data-pose="${p}" aria-label="Foto de ${l.toLowerCase()}">
       </label>`).join('')}</div>
@@ -108,10 +110,10 @@ SHEETS.photos = {
     const list = [...(sets || [])].reverse();
     return `
       ${list.length >= 2 ? '<button type="button" class="btn wide" data-act="ph-compare">Comparar dos fechas</button>' : ''}
-      <ul class="list top-gap">${list.map((x) => `<li><button type="button" class="row ph-item" data-act="ph-open" data-id="${x.id}">
+      <ul class="list top-gap">${list.map((x) => `<li><button type="button" class="row ph-item" data-act="ph-open" data-id="${esc(x.id)}">
         <span class="row-main">${dateLong(x.date)}${x.shared ? ' <em class="tag">compartida</em>' : ''}</span>
         <span class="row-sub">${x.poses.map((p) => POSE_NAME[p]).join(', ')}</span>
-        <span class="ph-mini">${x.poses.map((p) => `<img src="${x.thumbs[p]}" alt="">`).join('')}</span>
+        <span class="ph-mini">${x.poses.map((p) => `<img src="${esc(x.thumbs[p])}" alt="">`).join('')}</span>
       </button></li>`).join('')}</ul>
       <p class="hint">Haz una copia de las fotos en Ajustes › Tus datos: van en un archivo aparte de la copia normal.</p>`;
   },
@@ -121,7 +123,7 @@ SHEETS['photo-set'] = {
   title: (s) => dateLong(s.set.date),
   render: (s) => `
     ${shareBox(s)}
-    <div class="ph-full top-gap">${s.set.poses.map((p) => `<figure><img id="phf-${p}" src="${s.set.thumbs[p]}" alt="${POSE_NAME[p]}, ${dateShort(s.set.date)}"><figcaption>${POSE_NAME[p]}</figcaption></figure>`).join('')}</div>
+    <div class="ph-full top-gap">${s.set.poses.map((p) => `<figure><img id="phf-${p}" src="${esc(s.set.thumbs[p])}" alt="${POSE_NAME[p]}, ${dateShort(s.set.date)}"><figcaption>${POSE_NAME[p]}</figcaption></figure>`).join('')}</div>
     <div class="sheet-actions"><button type="button" class="btn danger ghost" data-act="ph-del">Borrar estas fotos</button></div>`,
   mount: async (s) => {
     for (const p of s.set.poses) {
@@ -135,7 +137,7 @@ SHEETS['photo-set'] = {
 SHEETS['photo-compare'] = {
   title: () => 'Comparar',
   render: (s) => {
-    const opts = (sel) => [...sets].reverse().filter((x) => x.poses.includes(s.pose)).map((x) => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${dateShort(x.date)}</option>`).join('');
+    const opts = (sel) => [...sets].reverse().filter((x) => x.poses.includes(s.pose)).map((x) => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>${dateShort(x.date)}</option>`).join('');
     const a = sets.find((x) => x.id === s.a);
     const b = sets.find((x) => x.id === s.b);
     const days = a && b ? Math.round((parseISO(b.date) - parseISO(a.date)) / 86400000) : null;
@@ -144,7 +146,7 @@ SHEETS['photo-compare'] = {
       <div class="ph-compare top-gap">
         ${[['a', a], ['b', b]].map(([k, x]) => `<figure>
           <select data-change="ph-which" data-k="${k}" aria-label="Fecha de la foto ${k === 'a' ? 'de la izquierda' : 'de la derecha'}">${opts(s[k])}</select>
-          ${x && x.poses.includes(s.pose) ? `<img id="phc-${k}" src="${x.thumbs[s.pose]}" alt="${POSE_NAME[s.pose]}, ${dateShort(x.date)}">` : '<p class="muted">Sin foto de esta pose.</p>'}
+          ${x && x.poses.includes(s.pose) ? `<img id="phc-${k}" src="${esc(x.thumbs[s.pose])}" alt="${POSE_NAME[s.pose]}, ${dateShort(x.date)}">` : '<p class="muted">Sin foto de esta pose.</p>'}
         </figure>`).join('')}
       </div>
       ${s.a && s.a === s.b ? '<p class="hint">Solo hay una sesión con esta pose. Añade otra para comparar.</p>' : days != null ? `<p class="hint">${days >= 0 ? plural(days, 'día', 'días') + ' entre una y otra' : ''}${weightNear(a.date) && weightNear(b.date) ? ` · peso ${fmt(weightNear(a.date), 1)} → ${fmt(weightNear(b.date), 1)} kg` : ''}</p>` : ''}`;
@@ -310,11 +312,12 @@ export function importPhotos() {
       if (data.app !== 'fitness-app-fotos' || !Array.isArray(data.sets)) throw new Error('formato');
       let n = 0;
       for (const x of data.sets) {
-        if (!x?.id || !x.date || !x.images) continue;
-        const poses = POSES.map(([p]) => p).filter((p) => typeof x.images[p] === 'string' && x.images[p].startsWith('data:image/'));
+        if (!x || typeof x.id !== 'string' || !/^[\w.:-]{1,60}$/.test(x.id) || !isDate(x.date) || !x.images) continue;
+        const poses = POSES.map(([p]) => p).filter((p) => isImageData(x.images[p]));
         if (!poses.length) continue;
+        const thumbs = Object.fromEntries(poses.filter((p) => isImageData(x.thumbs?.[p])).map((p) => [p, x.thumbs[p]]));
         for (const p of poses) await store.photoPut(`img:${x.id}:${p}`, x.images[p]);
-        await store.photoPut('set:' + x.id, { id: x.id, date: x.date, poses, thumbs: x.thumbs || {}, at: x.at || null });
+        await store.photoPut('set:' + x.id, { id: x.id, date: x.date, poses, thumbs, at: typeof x.at === 'string' ? plain(x.at) : null });
         n++;
       }
       await loadPhotoSets(true);

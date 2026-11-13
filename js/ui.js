@@ -19,7 +19,7 @@ export const ACCESS = {
     'day-prev', 'day-next', 'day-today', 'calendar', 'cal-month', 'cal-day', 'cal-today', 'edit-entry', 'lib',
     'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m',
     'week-prev', 'week-next', 'wtab', 'wview', 'wk-ex-toggle', 'act-open', 'range', 'report-open', 'report-week', 'report-copy',
-    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'theme', 'text-size', 'aj-jump', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
+    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
     'export-json', 'export-csv-diario', 'export-csv-resumen', 'export-csv-entrenos', 'export-csv-actividades', 'export-photos']),
   inputs: new Set(['libq', 'pickq', 'ex-q', 'admin-q']),
   forms: new Set(['sync-login', 'acct-code', 'acct-delete']),
@@ -75,7 +75,7 @@ export function pageList(key, items, step, renderItem) {
   const rest = items.length - shown;
   return {
     html,
-    more: rest > 0 ? `<button type="button" class="btn ghost small more-btn" data-act="more" data-key="${key}" data-step="${step}">Ver ${Math.min(rest, step)} más (quedan ${rest})</button>` : '',
+    more: rest > 0 ? `<button type="button" class="btn ghost small more-btn" data-act="more" data-key="${esc(key)}" data-step="${step}">Ver ${Math.min(rest, step)} más (quedan ${rest})</button>` : '',
   };
 }
 

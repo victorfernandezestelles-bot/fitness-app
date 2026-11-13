@@ -57,7 +57,7 @@ function stepRoutines() {
 
 function stepData() {
   return `
-    <p class="ob-lede">Todo lo que apuntes se guarda <b>solo en este teléfono</b>. No hay cuenta ni servidor.</p>
+    <p class="ob-lede">Lo que apuntes se guarda en este teléfono y se sincroniza con tu cuenta, en un servidor de la UE. Las fotos se quedan <b>solo en el teléfono</b>, salvo las que decidas compartir con tu entrenador.</p>
     <ul class="ob-points">
       <li>Guarda una copia de vez en cuando en Ajustes › Tus datos (archivo .json). Si pasa una semana sin copia, la app te avisa.</li>
       <li>Guárdala en Archivos, en iCloud Drive o envíatela por correo: con ella recuperas todo si cambias de móvil.</li>

@@ -181,7 +181,8 @@ export function weightSeries(days) {
   for (const d of dates) {
     if (d < from) continue;
     // Media de los registros de los 7 días que terminan en esta fecha
-    const win = dates.filter((x) => x <= d && x > addDays(d, -7));
+    const from7 = addDays(d, -7);
+    const win = dates.filter((x) => x <= d && x > from7);
     const avg = win.reduce((a, x) => a + S.weights[x], 0) / win.length;
     pts.push({ d, w: S.weights[d], avg });
   }
@@ -246,12 +247,12 @@ export function setsText(sets) {
     if (!isSeg(st) || !last) { out.push({ st, text: setText(st), groups: [] }); continue; }
     let g = last.groups[last.groups.length - 1];
     if (!g || g.t !== st.t) { g = { t: st.t, items: [] }; last.groups.push(g); }
-    g.items.push(st.t === 'rp' && (st.kg == null || st.kg === last.st.kg) ? `+${st.reps ?? '–'}` : st.t === 'rp' ? `+${setText(st)}` : setText(st));
+    g.items.push(st.t === 'rp' && (st.kg == null || st.kg === last.st.kg) ? `+${st.reps == null ? '–' : fmt(st.reps)}` : st.t === 'rp' ? `+${setText(st)}` : setText(st));
   }
   return out.map((p) => p.text + p.groups.map((g) => ` (${SEG_LABEL[g.t]} ${g.items.join(g.t === 'rp' ? ' ' : ', ')})`).join('')).join(' · ');
 }
 export const workoutsSorted = () => Object.values(S.workouts).sort((a, b) => (b.date + (b.start || '')).localeCompare(a.date + (a.start || '')));
-export const setText = (st) => `${st.kg == null ? '–' : fmt(st.kg, 2)}×${st.reps == null ? '–' : st.reps}`;
+export const setText = (st) => `${st.kg == null ? '–' : fmt(st.kg, 2)}×${st.reps == null ? '–' : fmt(st.reps)}`;
 export const musclesText = (ex) => {
   if (!ex) return '';
   const p = ex.primary.map((m) => MUSCLE_NAME[m]).join(', ');

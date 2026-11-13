@@ -1,9 +1,27 @@
-export const APP_VERSION = '0.20.0';
+export const APP_VERSION = '0.20.1';
 
 /* ---------- utilidades ---------- */
 
 export const $ = (s, el = document) => el.querySelector(s);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Quita los caracteres con los que un texto podría colarse como HTML (para identificadores, unidades y demás textos cortos)
+export const plain = (s) => String(s ?? '').replace(/[<>"]/g, '');
+// Limpia datos que no ha creado esta app en este momento (una copia restaurada, la ficha de un cliente, una plantilla
+// del entrenador): solo los campos de texto libre conservan cualquier carácter, y esos siempre se pintan con esc()
+const FREE_TEXT = new Set(['name', 'brand', 'note', 'notes']);
+const FREE_MAPS = new Set(['exNotes']);
+export function cleanData(v, key = '', free = false) {
+  if (typeof v === 'string') return free || FREE_TEXT.has(key) ? v : plain(v);
+  if (Array.isArray(v)) return v.map((x) => cleanData(x, key, free));
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) { if (k !== '__proto__') out[plain(k)] = cleanData(x, k, FREE_MAPS.has(key)); }
+    return out;
+  }
+  return v;
+}
+export const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+export const isImageData = (s) => typeof s === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(s);
 export const num = (v) => {
   if (v == null) return null;
   const s = String(v).trim().replace(/\s/g, '').replace(',', '.');
@@ -53,7 +71,8 @@ export const durLabel = (ms) => {
 export const restLabel = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
 
 export const csvText = (s) => {
-  const t = String(s ?? '');
+  let t = String(s ?? '');
+  if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+([.,]\d+)?$/.test(t)) t = "'" + t; // que Excel no lo tome por una fórmula
   return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 };
 export const csvNum = (n, d = 1) => (n == null ? '' : (Math.round(n * 10 ** d) / 10 ** d).toString().replace('.', ','));

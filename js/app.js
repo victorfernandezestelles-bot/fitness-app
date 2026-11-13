@@ -1,6 +1,6 @@
 // Arranque de la app: carga los datos, registra las secciones y comprueba si hay versión nueva.
 import * as store from './store.js';
-import { $, APP_VERSION } from './util.js';
+import { $, APP_VERSION, esc } from './util.js';
 import { flushAll, loadState } from './state.js';
 import { HOOKS, applyTheme, initEvents, render } from './ui.js';
 import { restoreRest } from './training.js';
@@ -32,7 +32,7 @@ async function checkUpdate() {
 function showUpdate(version) {
   const el = $('#update');
   if (!el || !el.hidden) return;
-  el.innerHTML = `<span>Hay una versión nueva (${version})</span><button type="button" class="btn small" id="update-btn">Actualizar</button>`;
+  el.innerHTML = `<span>Hay una versión nueva (${esc(version)})</span><button type="button" class="btn small" id="update-btn">Actualizar</button>`;
   el.hidden = false;
   $('#update-btn').addEventListener('click', async () => {
     flushAll();

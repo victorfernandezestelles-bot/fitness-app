@@ -65,6 +65,19 @@ export function clearAll(keep) {
   });
 }
 
+// Sustituye todo de una vez (salvo las claves que empiezan por «keep»): si algo falla, no cambia nada
+export function replaceAll(keep, entries) {
+  return tx('readwrite', (st) => {
+    const req = st.openCursor();
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) { for (const [k, v] of entries) st.put(v, k); return; }
+      if (!String(c.key).startsWith(keep)) c.delete();
+      c.continue();
+    };
+  });
+}
+
 export async function putMany(entries) {
   return tx('readwrite', (st) => { for (const [k, v] of entries) st.put(v, k); });
 }

@@ -2,7 +2,7 @@
 // y comparte con sus clientes. El cliente puede guardar la receta en las suyas o apuntar el plan en su diario.
 // Cada plantilla lleva dentro los alimentos propios que usa, para que el cliente los tenga aunque no existan en su app.
 import { BASICS_BY_ID, mult, scale, sumNut } from './nutrients.js';
-import { $, dateShort, esc, fmt, inputVal, num, plural, today, uid } from './util.js';
+import { $, cleanData, dateShort, esc, fmt, inputVal, num, plural, today, uid } from './util.js';
 import { GUARD, MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes } from './state.js';
 import { ensureDay, recipeTotals } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
@@ -180,7 +180,7 @@ SHEETS.tpl = {
 let clientTpls = null; // contenido de las plantillas compartidas conmigo
 
 async function loadClientTpls() {
-  try { clientTpls = await rpc('client_templates'); } catch (e) { toast(errorText(e)); }
+  try { clientTpls = cleanData(await rpc('client_templates')); } catch (e) { toast(errorText(e)); }
 }
 
 export function tplNew() {
@@ -224,7 +224,7 @@ function importFoods(payload) {
   let n = 0;
   for (const [id, f] of Object.entries(payload.foods || {})) {
     if (S.foods[id] || BASICS_BY_ID[id]) continue;
-    S.foods[id] = { ...structuredClone(f), id };
+    S.foods[id] = { ...cleanData(structuredClone(f)), id };
     n++;
   }
   if (n) saveFoods();
@@ -321,7 +321,7 @@ Object.assign(ACTIONS, {
     const old = Object.values(S.recipes).find((r) => r.tplId === t.id);
     const r = t.payload.recipe || {};
     const id = old?.id || uid();
-    S.recipes[id] = { id, tplId: t.id, name: r.name || t.name, servings: r.servings || 1, cookedG: r.cookedG ?? null, items: structuredClone(r.items || []), updated: new Date().toISOString() };
+    S.recipes[id] = { id, tplId: t.id, name: r.name || t.name, servings: num(r.servings) > 0 ? num(r.servings) : 1, cookedG: num(r.cookedG), items: (Array.isArray(r.items) ? r.items : []).map((it) => ({ foodId: String(it?.foodId ?? ''), g: num(it?.g) || 0 })), updated: new Date().toISOString() };
     saveRecipes();
     popSheet();
     toast(old ? 'Receta actualizada' : 'Guardada en tus recetas');
@@ -336,7 +336,7 @@ Object.assign(ACTIONS, {
     for (const it of t.payload.items || []) {
       const f = foodIn(t.payload, it.foodId);
       if (!f || !(it.g > 0)) continue;
-      day.entries.push({ id: uid(), meal: MEAL_NAME[it.meal] ? it.meal : 'otros', type: 'food', ref: it.foodId, name: f.name, qty: it.g, unit: 'g', n: scale(f.per100, it.g) });
+      day.entries.push({ id: uid(), meal: MEAL_NAME[it.meal] ? it.meal : 'otros', type: 'food', ref: it.foodId, name: f.name, qty: Number(it.g), unit: 'g', n: scale(f.per100, Number(it.g)) });
       n++;
     }
     saveDay(date);

@@ -49,7 +49,7 @@ export async function loadFicha(id, force = false) {
   c.loading = false;
   if (S.ui.tab === 'clientes' && S.ui.client === id && !S.sheets.length) render();
 }
-export function forgetFichas() { for (const k of Object.keys(cache)) delete cache[k]; }
+export function forgetFichas() { for (const k of Object.keys(cache)) delete cache[k]; fullCache.clear(); }
 
 const model = () => (S.settings.profile?.sex === 'm' ? 'mujer' : 'hombre');
 const sumDay = (day) => day.entries.reduce((a, e) => { for (const k of ['kcal', 'p', 'c', 'f']) a[k] += e.n?.[k] || 0; return a; }, { kcal: 0, p: 0, c: 0, f: 0 });
@@ -109,7 +109,7 @@ function diario() {
       <ul class="entries">${list.map((e) => `<li><div class="entry static">
         <span class="e-name">${esc(e.name)}</span>
         <span class="e-kcal">${fmt(e.n?.kcal)}</span>
-        <span class="e-sub">${qtyLabel(e.qty, e.unit)} · P ${fmt(e.n?.p, 0)} · H ${fmt(e.n?.c, 0)} · G ${fmt(e.n?.f, 0)}</span>
+        <span class="e-sub">${esc(qtyLabel(e.qty, e.unit))} · P ${fmt(e.n?.p, 0)} · H ${fmt(e.n?.c, 0)} · G ${fmt(e.n?.f, 0)}</span>
       </div></li>`).join('')}</ul>
     </section>`;
   }).join('');
@@ -161,7 +161,7 @@ function entrenos() {
     ${acts.length ? `<h3 class="list-title">Cardio y actividades</h3>
       <ul class="list">${acts.map((a) => `<li class="row static">
         <span class="row-main">${esc(actName(a))}</span>
-        <span class="row-sub">${dayLabel(a.date)}${a.min ? ` · ${a.min} min` : ''}${a.km ? ` · ${fmt(a.km, 1)} km` : ''}${a.kcal ? ` · ${fmt(a.kcal)} kcal` : ''}</span>
+        <span class="row-sub">${dayLabel(a.date)}${a.min ? ` · ${fmt(a.min)} min` : ''}${a.km ? ` · ${fmt(a.km, 1)} km` : ''}${a.kcal ? ` · ${fmt(a.kcal)} kcal` : ''}</span>
       </li>`).join('')}</ul>` : ''}`;
 }
 
@@ -222,7 +222,7 @@ function photosCard() {
       ${list.length ? `<ul class="list">${list.map((x) => `<li><button type="button" class="row ph-item" data-act="fc-photos" data-set="${esc(x.set)}">
           <span class="row-main">${dateLong(x.date)}</span>
           <span class="row-sub">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => POSE_L[p]).join(', ')}</span>
-          <span class="ph-mini">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<img src="${x.poses[p].thumb}" alt="">`).join('')}</span>
+          <span class="ph-mini">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<img src="${esc(x.poses[p].thumb)}" alt="">`).join('')}</span>
         </button></li>`).join('')}</ul>
         ${list.length >= 2 ? '<button type="button" class="btn ghost wide top-gap" data-act="fc-ph-compare">Comparar dos fechas</button>' : ''}`
       : '<p class="muted">No ha compartido fotos contigo. Las fotos son privadas: cada cliente decide qué sesiones comparte.</p>'}
@@ -241,7 +241,7 @@ SHEETS['fc-photos'] = {
   render: (s) => {
     const x = sessionOf(s, s.set);
     if (!x) return '<p class="empty">Ya no comparte estas fotos.</p>';
-    return `<div class="ph-full">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<figure><img id="fcf-${p}" src="${x.poses[p].thumb}" alt="${POSE_L[p]}"><figcaption>${POSE_L[p]}</figcaption></figure>`).join('')}</div>`;
+    return `<div class="ph-full">${POSE_ORDER.filter((p) => x.poses[p]).map((p) => `<figure><img id="fcf-${p}" src="${esc(x.poses[p].thumb)}" alt="${POSE_L[p]}"><figcaption>${POSE_L[p]}</figcaption></figure>`).join('')}</div>`;
   },
   mount: async (s) => {
     const x = sessionOf(s, s.set);
@@ -263,7 +263,7 @@ SHEETS['fc-ph-compare'] = {
       <div class="ph-compare top-gap">
         ${['a', 'b'].map((k) => { const x = pick(k); return `<figure>
           <select data-change="fc-ph-which" data-k="${k}" aria-label="Fecha">${opts(s[k])}</select>
-          ${x ? `<img id="fcc-${k}" src="${x.poses[s.pose].thumb}" alt="${POSE_L[s.pose]}, ${dateShort(x.date)}">` : '<p class="muted">Sin foto de esta pose.</p>'}
+          ${x ? `<img id="fcc-${k}" src="${esc(x.poses[s.pose].thumb)}" alt="${POSE_L[s.pose]}, ${dateShort(x.date)}">` : '<p class="muted">Sin foto de esta pose.</p>'}
         </figure>`; }).join('')}
       </div>`;
   },
@@ -379,7 +379,7 @@ SHEETS['fc-workout'] = {
         <h3 class="list-title">Ejercicios</h3>
         <ul class="fc-exs">${w.exercises.map((we) => `<li>
           <b>${esc(exName(we))}</b>
-          <span>${we.sets.map((x) => `<span class="fc-set${x.t === 'w' ? ' warm' : ''}${isSeg(x) ? ' seg' : ''}${x.t === 'w' || isEffective(x) ? '' : ' undone'}">${x.t === 'w' ? 'C ' : isSeg(x) ? `↳ ${SEG_LABEL[x.t]} ` : ''}${setText(x)}${x.rir != null ? ` <small>RIR ${x.rir}</small>` : ''}</span>`).join('')}</span>
+          <span>${we.sets.map((x) => `<span class="fc-set${x.t === 'w' ? ' warm' : ''}${isSeg(x) ? ' seg' : ''}${x.t === 'w' || isEffective(x) ? '' : ' undone'}">${x.t === 'w' ? 'C ' : isSeg(x) ? `↳ ${SEG_LABEL[x.t]} ` : ''}${esc(setText(x))}${x.rir != null ? ` <small>RIR ${esc(x.rir)}</small>` : ''}</span>`).join('')}</span>
         </li>`).join('')}</ul>
         <p class="hint">C = serie de calentamiento. DS = bajada de un dropset y RP = bloque de un rest-pause, de la serie anterior. Las series tachadas no se marcaron como hechas.</p>`;
     });

@@ -5,7 +5,7 @@
 // ahí se juntan las comidas de los dos.
 import * as store from './store.js';
 import { SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { $, esc } from './util.js';
+import { $, cleanData, esc, plain } from './util.js';
 import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout } from './state.js';
 import { ACTIONS, FORMS, HOOKS, SHEETS, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { keepAwake } from './training.js';
@@ -78,7 +78,8 @@ export function dataFromRows(list) {
   const d = { settings: {}, days: {}, workouts: {}, foods: {}, recipes: {}, weights: {}, exercises: {}, routines: {}, measures: {}, activities: {} };
   for (const r of list || []) {
     let value;
-    try { value = upgrade(r.key, r.value, r.v); } catch (e) { continue; }
+    if (typeof r?.key !== 'string' || r.key !== plain(r.key)) continue;
+    try { value = cleanData(upgrade(r.key, r.value, r.v)); } catch (e) { continue; }
     if (value == null) continue;
     if (r.key === 'settings') d.settings = value;
     else if (r.key.startsWith('day:')) d.days[r.key.slice(4)] = value;

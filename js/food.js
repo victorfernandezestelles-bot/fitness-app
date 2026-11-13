@@ -1,7 +1,7 @@
 import { BASICS, BASICS_BY_ID, KEYS, MACROS, MICROS, kcalFrom, mult, sumNut } from './nutrients.js';
 import { offProduct, offSearch } from './off.js';
 import { checksumOk, decodeGray, imageDataToGray } from './barcode.js';
-import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plural, today, uid } from './util.js';
+import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plain, plural, today, uid } from './util.js';
 import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
 import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, parseUnit, pluralEs, qtyLabel, recentItems, recipeTotals, unitCode } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
@@ -50,7 +50,7 @@ export function viewHoy() {
         <li><button class="entry" type="button" data-act="edit-entry" data-id="${e.id}">
           <span class="e-name">${esc(e.name)}</span>
           <span class="e-kcal">${fmt(e.n.kcal)}</span>
-          <span class="e-sub">${qtyLabel(e.qty, e.unit)} · P ${fmt(e.n.p, 0)} · H ${fmt(e.n.c, 0)} · G ${fmt(e.n.f, 0)}</span>
+          <span class="e-sub">${esc(qtyLabel(e.qty, e.unit))} · P ${fmt(e.n.p, 0)} · H ${fmt(e.n.c, 0)} · G ${fmt(e.n.f, 0)}</span>
         </button></li>`).join('')}</ul>
     </section>`;
   }).join('') + (empty.length ? `
@@ -187,7 +187,7 @@ export function fillLibList() {
       const per = mult(total, 1 / (r.servings || 1));
       return `<li><button type="button" class="row" data-act="open-recipe" data-id="${r.id}">
         <span class="row-main">${esc(r.name)}</span>
-        <span class="row-sub">${r.items.length} ingredientes · ${r.servings || 1} ${r.servings === 1 ? 'ración' : 'raciones'}</span>
+        <span class="row-sub">${r.items.length} ingredientes · ${fmt(r.servings || 1, 2)} ${r.servings === 1 ? 'ración' : 'raciones'}</span>
         <span class="row-side">${fmt(per.kcal)} <small>kcal/ración</small></span>
       </button></li>`;
     }).join('')}</ul>`;
@@ -294,9 +294,9 @@ export function fillPickList(s) {
     if (favs.length) {
       html += `<h3 class="list-title">Favoritos</h3><ul class="list">${favs.map((r) => {
         const n = nutFor(r, r.qty ?? defaultQty(r), r.unit ?? defaultUnit(r));
-        return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" ${r.qty != null ? `data-qty="${r.qty}" data-unit="${r.unit}"` : ''}>
+        return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" ${r.qty != null ? `data-qty="${esc(r.qty)}" data-unit="${esc(r.unit)}"` : ''}>
           <span class="row-main"><span class="star" aria-hidden="true">★</span> ${esc(itemName(r))}</span>
-          <span class="row-sub">${r.qty != null ? qtyLabel(r.qty, r.unit) + ' la última vez' : (r.type === 'recipe' ? 'Receta' : 'Alimento')}</span>
+          <span class="row-sub">${r.qty != null ? esc(qtyLabel(r.qty, r.unit)) + ' la última vez' : (r.type === 'recipe' ? 'Receta' : 'Alimento')}</span>
           <span class="row-side">${fmt(n?.kcal)} <small>kcal</small></span>
         </button></li>`;
       }).join('')}</ul>`;
@@ -313,9 +313,9 @@ export function fillPickList(s) {
         </button></li>`;
         }
         const n = nutFor(r, r.qty, r.unit);
-        return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" data-qty="${r.qty}" data-unit="${r.unit}">
+        return `<li><button type="button" class="row" data-act="pick" data-type="${r.type}" data-id="${esc(r.id)}" data-qty="${esc(r.qty)}" data-unit="${esc(r.unit)}">
           <span class="row-main">${esc(itemName(r))}</span>
-          <span class="row-sub">${qtyLabel(r.qty, r.unit)} la última vez</span>
+          <span class="row-sub">${esc(qtyLabel(r.qty, r.unit))} la última vez</span>
           <span class="row-side">${fmt(n?.kcal)} <small>kcal</small></span>
         </button></li>`;
       }).join('')}</ul>`;
@@ -424,7 +424,7 @@ SHEETS.copy = {
       if (!list.length) return '';
       return `<h3 class="list-title">${l}</h3><ul class="list">${list.map((e) => `<li class="row static">
         <span class="row-main">${esc(e.name)}</span><span class="row-side">${fmt(e.n.kcal)} <small>kcal</small></span><span></span>
-        <span class="row-sub">${qtyLabel(e.qty, e.unit)}</span></li>`).join('')}</ul>`;
+        <span class="row-sub">${esc(qtyLabel(e.qty, e.unit))}</span></li>`).join('')}</ul>`;
     }).join('');
     return `
       <label class="field"><span>Copiar desde el día</span><input id="copy-from" type="date" value="${s.from}" max="${today()}" data-change="copy-from"></label>
@@ -524,7 +524,7 @@ SHEETS.qty = {
         </div>`;
       }
       const per = r ? mult(recipeTotals(r).total, 1 / (r.servings || 1)) : null;
-      base = per ? `Receta de ${r.servings || 1} ${r.servings === 1 ? 'ración' : 'raciones'} · ${fmt(per.kcal)} kcal por ración${r.cookedG ? ` · ${fmt(r.cookedG)} g cocinada` : ''}` : '';
+      base = per ? `Receta de ${fmt(r.servings || 1, 2)} ${r.servings === 1 ? 'ración' : 'raciones'} · ${fmt(per.kcal)} kcal por ración${r.cookedG ? ` · ${fmt(r.cookedG)} g cocinada` : ''}` : '';
     }
     s.qty = qty; s.unit = unit;
     const meal = s.meal || 'comida';
@@ -725,7 +725,7 @@ export async function handleCode(code, scannerSheet) {
   const shared = offline ? null : await sharedFood(code);
   if (S.sheets[S.sheets.length - 1] !== scannerSheet) return;
   if (shared) {
-    replaceTop({ type: 'food', draft: { name: shared.name, brand: shared.brand, barcode: code, servingG: shared.serving_g, unitName: shared.unit_name || undefined, unitG: shared.unit_g || undefined, per100: shared.per100, id: null, source: 'comunidad' },
+    replaceTop({ type: 'food', draft: { name: shared.name, brand: shared.brand, barcode: code, servingG: shared.serving_g, unitName: plain(shared.unit_name || '') || undefined, unitG: shared.unit_g || undefined, per100: shared.per100, id: null, source: 'comunidad' },
       then, shared: { code, mine: shared.mine }, shareOffer: shared.mine,
       note: 'Datos que ha añadido otro usuario de la app (este producto no está en Open Food Facts). Compáralos con la etiqueta antes de guardar.' });
   } else if (p) {
@@ -813,7 +813,7 @@ export function readFoodForm(s) {
     name: $('#ff-name').value.trim(),
     brand: $('#ff-brand').value.trim(),
     servingG: num($('#ff-serving').value),
-    unitName: $('#ff-uname').value.trim().toLowerCase() || null,
+    unitName: plain($('#ff-uname').value).trim().toLowerCase() || null,
     unitG: num($('#ff-ug').value),
     barcode: $('#ff-code').value.replace(/\D/g, ''),
     per100,

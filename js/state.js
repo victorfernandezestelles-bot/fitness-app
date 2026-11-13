@@ -1,7 +1,7 @@
 // Estado de la app, guardado en el teléfono y versión de los datos (migraciones).
 import * as store from './store.js';
 import { KEYS } from './nutrients.js';
-import { today } from './util.js';
+import { cleanData, today } from './util.js';
 import { toast } from './ui.js';
 
 export const MEALS = [
@@ -220,10 +220,9 @@ export async function loadState() {
 
 // Sustituye todos los datos por los de una copia (ya validada)
 export async function replaceAll(data) {
-  const d = migrate(data, data.schema || data.version || 1);
+  const d = migrate(cleanData(data), data.schema || data.version || 1);
   dropPending();
-  await store.clearAll('sync:'); // la sesión de la cuenta se mantiene
-  await store.putMany(toStoreEntries(d));
+  await store.replaceAll('sync:', toStoreEntries(d)); // la sesión de la cuenta se mantiene
   applySnapshot(d);
   SAVED.forEach((fn) => fn('*'));
 }
