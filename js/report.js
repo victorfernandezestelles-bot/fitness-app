@@ -1,9 +1,10 @@
-// Informe semanal (lunes a domingo) e historial de series por músculo
+// Informe por periodo (resumen y día a día) e historial de series por músculo
 import { MUSCLES, MUSCLE_NAME } from './exercises.js';
-import { $, addDays, dateShort, durLabel, esc, fmt, parseISO, plural, today } from './util.js';
-import { S } from './state.js';
-import { mondayOf, muscleHistory, weekReport } from './derived.js';
+import { $, addDays, cap, dateLong, dateShort, deliverFile, durLabel, esc, fmt, isDate, parseISO, plural, today } from './util.js';
+import { MEALS, S } from './state.js';
+import { MEASURES, datesBetween, exName, isEffective, isSeg, mondayOf, muscleHistory, periodReport, qtyLabel, setsText, weekReport, workoutDuration } from './derived.js';
 import { ACTIONS, SHEETS, chartTooltip, pushSheet, render, renderSheets, toast } from './ui.js';
+import { actName } from './cardio.js';
 
 // La última semana completa: el informe de una semana sale el lunes siguiente
 export const lastFullWeek = () => addDays(mondayOf(today()), -7);
@@ -23,7 +24,7 @@ export function reportCard() {
       r.kcal.n ? `${fmt(r.kcal.avg)} kcal de media` : '',
       r.strength.sessions ? plural(r.strength.sessions, 'sesión de fuerza', 'sesiones de fuerza') : '',
     ].filter(Boolean).join(' · ')}</p>` : '<p class="muted">La semana pasada no hay datos apuntados.</p>'}
-    <button type="button" class="btn ghost wide top-gap" data-act="report-open">Ver el informe</button>
+    <button type="button" class="btn ghost wide top-gap" data-act="report-open">Ver o compartir un informe</button>
   </section>`;
 }
 
@@ -31,50 +32,151 @@ function line(label, value, sub = '') {
   return `<div class="rep-line"><span class="rep-l">${label}</span><span class="rep-v">${value}</span>${sub ? `<span class="rep-s">${sub}</span>` : ''}</div>`;
 }
 
+/* ---------- informe por periodo ---------- */
+
+const MAX_DAYS = 366;
+const PRESETS = [['7d', 'Últimos 7 días'], ['lastweek', 'Semana pasada'], ['30d', 'Últimos 30 días'], ['custom', 'Elegir fechas']];
+const numDate = (d) => d.split('-').reverse().join('/');
+const longDate = (d) => `${cap(dateLong(d))} · ${numDate(d)}`;
+
+// Fechas del periodo elegido
+export function reportRange(s) {
+  const t = today();
+  if (s.preset === '7d') return [addDays(t, -6), t];
+  if (s.preset === '30d') return [addDays(t, -29), t];
+  if (s.preset === 'custom' && s.from && s.to) return [s.from, s.to];
+  const mon = lastFullWeek();
+  return [mon, addDays(mon, 6)];
+}
+const periodTitle = (from, to) => (from === to ? `Informe del ${numDate(from)}` : `Informe del ${numDate(from)} al ${numDate(to)}`);
+
+// Una línea por ejercicio: series efectivas y, si las hay, las RIR
+function exerciseLine(we) {
+  const eff = (we.sets || []).filter((st) => st.t !== 'w' && isEffective(st));
+  if (!eff.length) return null;
+  const rir = eff.filter((st) => !isSeg(st) && st.rir != null).map((st) => fmt(st.rir));
+  return { name: exName(we), sets: setsText(eff), rir: rir.length ? rir.join('/') : '' };
+}
+
+// Contenido del informe; text = true para la versión en texto
+function dayParts(x, withFoods) {
+  const out = { food: '', meals: [], body: '', workouts: [], activities: [], measures: '' };
+  if (x.food) {
+    const g = x.goals?.kcal;
+    out.food = `${fmt(x.food.kcal)} kcal${g ? ` (objetivo ${fmt(g)})` : ''} · P ${fmt(x.food.p)} · H ${fmt(x.food.c)} · G ${fmt(x.food.f)} g`;
+    if (withFoods) {
+      out.meals = MEALS.map(([k, l]) => {
+        const list = x.entries.filter((e) => (e.meal || 'otros') === k);
+        return list.length ? { l, items: list.map((e) => `${e.name || 'Alimento'} ${qtyLabel(e.qty, e.unit)}`) } : null;
+      }).filter(Boolean);
+    }
+  }
+  out.body = [x.steps != null ? `${fmt(x.steps)} pasos` : '', x.weight != null ? `${fmt(x.weight, 1)} kg` : '', x.sleep != null ? `${fmt(x.sleep, 1)} h de sueño` : ''].filter(Boolean).join(' · ');
+  out.workouts = x.workouts.map((w) => {
+    const dur = workoutDuration(w);
+    return { title: `${w.name || 'Entreno'}${dur ? ` (${durLabel(dur)})` : ''}`, lines: w.exercises.map(exerciseLine).filter(Boolean) };
+  });
+  out.activities = x.activities.map((a) => [actName(a), a.min ? `${fmt(a.min)} min` : '', a.km ? `${fmt(a.km, 1)} km` : '', a.kcal ? `${fmt(a.kcal)} kcal` : ''].filter(Boolean).join(' · '));
+  if (x.measures) out.measures = MEASURES.filter((m) => x.measures[m.k] != null).map((m) => `${m.l.toLowerCase()} ${fmt(x.measures[m.k], 1)} ${m.u}`).join(', ');
+  return out;
+}
+
+function summaryLines(r) {
+  const goalSteps = S.settings.goals.steps;
+  const out = [];
+  const w = r.weight;
+  if (w.n) {
+    const sub = w.n === 1 ? `una pesada (${numDate(w.first.d)})`
+      : `${w.n} pesadas · de ${fmt(w.first.weight, 1)} kg (${numDate(w.first.d)}) a ${fmt(w.last.weight, 1)} kg (${numDate(w.last.d)})`;
+    out.push(['Peso', `${fmt(w.avg, 1)} kg de media`, sub + (w.trend != null ? ` · primera semana frente a la última: ${signed(w.trend)} kg` : '')]);
+  } else out.push(['Peso', '–', 'sin pesadas']);
+  out.push(r.kcal.n ? ['Calorías', `${fmt(r.kcal.avg)} kcal de media`, `${r.kcal.n} de ${r.n} días apuntados${r.kcal.goal ? ` · objetivo medio ${fmt(r.kcal.goal)}` : ''}`] : ['Calorías', '–', 'ningún día apuntado']);
+  if (r.kcal.n) out.push(['Macros', `P ${fmt(r.kcal.p)} · H ${fmt(r.kcal.c)} · G ${fmt(r.kcal.f)} g`, 'media de los días apuntados']);
+  out.push(r.steps.n ? ['Pasos', `${fmt(r.steps.avg)} de media`, `${plural(r.steps.n, 'día', 'días')}${r.steps.hit != null ? ` · ${r.steps.hit} con el objetivo de ${fmt(goalSteps)}` : ''}`] : ['Pasos', '–', 'sin datos']);
+  out.push(r.sleep.n ? ['Sueño', `${fmt(r.sleep.avg, 1)} h de media`, plural(r.sleep.n, 'noche', 'noches')] : ['Sueño', '–', 'sin datos']);
+  out.push(['Fuerza', plural(r.strength.sessions, 'sesión', 'sesiones'), `${r.strength.sets} series efectivas`]);
+  out.push(['Cardio y actividades', plural(r.cardio.count, 'actividad', 'actividades'), r.cardio.count ? durLabel(r.cardio.min * 60000) : '']);
+  return out;
+}
+
+function reportHTML(r, withFoods) {
+  const muscles = r.muscles.length ? `<h3 class="list-title">Series por músculo</h3>
+    <p class="hint">${r.n >= 7 ? 'Media por semana del periodo; la zona buena es de 10 a 20.' : 'Total del periodo.'}</p>
+    <div class="rep-muscles">${r.muscles.map((m) => { const v = r.n >= 7 ? m.wk : m.v; return `<span class="rep-m${r.n >= 7 && v >= 10 && v <= 20 ? ' in' : ''}">${esc(m.l)} <b>${fmt(v, 1)}</b></span>`; }).join('')}</div>` : '';
+  const days = r.days.map((x) => {
+    const p = dayParts(x, withFoods);
+    return `<article class="rep-day">
+      <h4>${longDate(x.d)}</h4>
+      ${p.food ? `<p><b>Comida:</b> ${esc(p.food)}</p>` : ''}
+      ${p.meals.length ? `<ul class="rep-list">${p.meals.map((m) => `<li><b>${esc(m.l)}:</b> ${esc(m.items.join(', '))}</li>`).join('')}</ul>` : ''}
+      ${p.body ? `<p>${esc(p.body)}</p>` : ''}
+      ${p.workouts.map((w) => `<p><b>Entreno «${esc(w.title)}»</b></p>
+        <ul class="rep-list">${w.lines.map((l) => `<li>${esc(l.name)}: ${esc(l.sets)}${l.rir ? ` <span class="muted">· RIR ${esc(l.rir)}</span>` : ''}</li>`).join('')}</ul>`).join('')}
+      ${p.activities.map((a) => `<p><b>Actividad:</b> ${esc(a)}</p>`).join('')}
+      ${p.measures ? `<p><b>Medidas:</b> ${esc(p.measures)}</p>` : ''}
+    </article>`;
+  }).join('');
+  return `<div class="rep-doc">
+    <h3 class="rep-title">${periodTitle(r.from, r.to)}</h3>
+    <div class="rep">${summaryLines(r).map(([l, v, sub]) => line(esc(l), esc(v), esc(sub))).join('')}</div>
+    ${muscles}
+    <h3 class="list-title">Día a día</h3>
+    ${days || '<p class="empty">No hay nada apuntado en estas fechas.</p>'}
+  </div>`;
+}
+
+export function reportText(r, withFoods) {
+  const out = [periodTitle(r.from, r.to), ''];
+  for (const [l, v, sub] of summaryLines(r)) if (v !== '–') out.push(`${l}: ${v}${sub ? ` (${sub})` : ''}`);
+  if (r.muscles.length) out.push(`Series por músculo${r.n >= 7 ? ' (media por semana)' : ''}: ${r.muscles.map((m) => `${m.l} ${fmt(r.n >= 7 ? m.wk : m.v, 1)}`).join(', ')}`);
+  for (const x of r.days) {
+    const p = dayParts(x, withFoods);
+    out.push('', `— ${longDate(x.d)}`);
+    if (p.food) out.push(`Comida: ${p.food}`);
+    for (const m of p.meals) out.push(`  ${m.l}: ${m.items.join(', ')}`);
+    if (p.body) out.push(p.body);
+    for (const w of p.workouts) {
+      out.push(`Entreno «${w.title}»`);
+      for (const l of w.lines) out.push(`  ${l.name}: ${l.sets}${l.rir ? ` · RIR ${l.rir}` : ''}`);
+    }
+    for (const a of p.activities) out.push(`Actividad: ${a}`);
+    if (p.measures) out.push(`Medidas: ${p.measures}`);
+  }
+  return out.join('\n');
+}
+
 SHEETS.report = {
-  title: () => 'Informe semanal',
+  title: () => 'Informe',
   render: (s) => {
-    const r = weekReport(s.monday);
-    const canNext = s.monday < lastFullWeek();
-    const cur = s.monday === mondayOf(today());
-    const goalSteps = S.settings.goals.steps;
+    const [from, to] = reportRange(s);
+    const r = periodReport(from, to);
     return `
-      <div class="cal-nav">
-        <button type="button" class="icon-btn" data-act="report-week" data-d="-7" aria-label="Semana anterior">‹</button>
-        <h3 class="cal-title">${weekTitle(s.monday)}${cur ? ' <small class="muted">(en curso)</small>' : ''}</h3>
-        <button type="button" class="icon-btn" data-act="report-week" data-d="7" aria-label="Semana siguiente" ${canNext || s.monday < mondayOf(today()) ? '' : 'disabled'}>›</button>
+      <div class="chips" role="group" aria-label="Periodo">
+        ${PRESETS.map(([k, l]) => `<button type="button" class="chip${s.preset === k ? ' on' : ''}" data-act="rep-preset" data-v="${k}" aria-pressed="${s.preset === k}">${l}</button>`).join('')}
       </div>
-      <div class="rep">
-        ${line('Peso', r.weight.avg != null ? `${fmt(r.weight.avg, 1)} kg` : '–', r.weight.avg != null ? `media de ${plural(r.weight.n, 'pesada', 'pesadas')}${r.weight.change != null ? ` · ${signed(r.weight.change)} kg frente a la semana anterior` : ''}` : 'sin pesadas')}
-        ${line('Calorías', r.kcal.n ? `${fmt(r.kcal.avg)} kcal` : '–', r.kcal.n ? `media de ${r.kcal.n} de 7 días apuntados${r.kcal.goal ? ` · objetivo ${fmt(r.kcal.goal)}` : ''}` : 'ningún día apuntado')}
-        ${r.kcal.n ? line('Proteínas', `${fmt(r.kcal.protein)} g`, 'media de los días apuntados') : ''}
-        ${line('Pasos', r.steps.n ? fmt(r.steps.avg) : '–', r.steps.n ? `media de ${plural(r.steps.n, 'día', 'días')}${r.steps.hit != null ? ` · ${r.steps.hit} con el objetivo de ${fmt(goalSteps)}` : ''}` : 'sin datos')}
-        ${line('Sueño', r.sleep.n ? `${fmt(r.sleep.avg, 1)} h` : '–', r.sleep.n ? `media de ${plural(r.sleep.n, 'noche', 'noches')}` : 'sin datos')}
-        ${line('Fuerza', plural(r.strength.sessions, 'sesión', 'sesiones'), `${r.strength.sets} series efectivas`)}
-        ${line('Cardio y actividades', plural(r.cardio.count, 'actividad', 'actividades'), r.cardio.count ? durLabel(r.cardio.min * 60000) : '')}
+      ${s.preset === 'custom' ? `<div class="grid2 top-gap">
+        <label class="field"><span>Desde</span><input id="rep-from" type="date" value="${from}" max="${today()}"></label>
+        <label class="field"><span>Hasta</span><input id="rep-to" type="date" value="${to}" max="${today()}"></label>
       </div>
-      ${r.muscles.length ? `<h3 class="list-title">Series por músculo</h3>
-        <div class="rep-muscles">${r.muscles.map((m) => `<span class="rep-m${m.v >= 10 && m.v <= 20 ? ' in' : ''}">${m.l} <b>${fmt(m.v, 1)}</b></span>`).join('')}</div>` : ''}
-      ${r.measures.length ? `<h3 class="list-title">Medidas</h3>
-        <div class="rep">${r.measures.map((m) => line(m.l, `${fmt(m.v, 1)} ${m.u}`, m.d != null ? `${signed(m.d)} ${m.u} desde la anterior` : 'primera medida')).join('')}</div>` : ''}
-      <textarea id="rep-text" class="rep-text" rows="6" readonly aria-label="Informe en texto">${esc(reportText(r))}</textarea>
-      <div class="sheet-actions"><button type="button" class="btn primary" data-act="report-copy">Copiar como texto</button></div>`;
+      <button type="button" class="btn wide top-gap" data-act="rep-range">Ver estas fechas</button>` : ''}
+      <button type="button" class="chip top-gap${s.foods ? ' on' : ''}" data-act="rep-foods" aria-pressed="${!!s.foods}">Incluir cada alimento</button>
+      ${reportHTML(r, s.foods)}
+      <textarea id="rep-text" class="rep-text" rows="4" readonly aria-label="Informe en texto">${esc(reportText(r, s.foods))}</textarea>
+      <p class="hint">El informe lleva datos de salud: compártelo solo con quien tú quieras.</p>
+      <div class="sheet-actions rep-actions">
+        <button type="button" class="btn primary" data-act="rep-share">Compartir</button>
+        <button type="button" class="btn" data-act="rep-print">PDF</button>
+        <button type="button" class="btn ghost" data-act="rep-file">Archivo</button>
+      </div>`;
   },
 };
 
-export function reportText(r) {
-  const out = [weekTitle(r.monday)];
-  if (r.weight.avg != null) out.push(`Peso: ${fmt(r.weight.avg, 1)} kg de media${r.weight.change != null ? ` (${signed(r.weight.change)} kg)` : ''}`);
-  if (r.kcal.n) out.push(`Calorías: ${fmt(r.kcal.avg)} kcal de media, ${r.kcal.n} de 7 días apuntados${r.kcal.goal ? ` (objetivo ${fmt(r.kcal.goal)})` : ''}`);
-  if (r.kcal.n) out.push(`Proteínas: ${fmt(r.kcal.protein)} g de media`);
-  if (r.steps.n) out.push(`Pasos: ${fmt(r.steps.avg)} de media${r.steps.hit != null ? `, ${r.steps.hit} ${r.steps.hit === 1 ? 'día' : 'días'} con el objetivo` : ''}`);
-  if (r.sleep.n) out.push(`Sueño: ${fmt(r.sleep.avg, 1)} h de media (${plural(r.sleep.n, 'noche', 'noches')})`);
-  out.push(`Fuerza: ${plural(r.strength.sessions, 'sesión', 'sesiones')}, ${r.strength.sets} series`);
-  if (r.cardio.count) out.push(`Cardio y actividades: ${plural(r.cardio.count, 'actividad', 'actividades')}, ${durLabel(r.cardio.min * 60000)}`);
-  if (r.muscles.length) out.push(`Series por músculo: ${r.muscles.map((m) => `${m.l} ${fmt(m.v, 1)}`).join(', ')}`);
-  if (r.measures.length) out.push(`Medidas: ${r.measures.map((m) => `${m.l.toLowerCase()} ${fmt(m.v, 1)} ${m.u}${m.d != null ? ` (${signed(m.d)})` : ''}`).join(', ')}`);
-  return out.join('\n');
-}
+// Estilos del archivo .html del informe (se abre en cualquier navegador y se puede imprimir)
+const FILE_CSS = `body{font:15px/1.45 -apple-system,system-ui,sans-serif;color:#1d1d1f;max-width:760px;margin:24px auto;padding:0 16px}
+h3{margin:22px 0 8px;font-size:17px}h4{margin:0 0 6px;font-size:15px}p{margin:4px 0}.muted,.hint{color:#6e6e73}.hint{font-size:13px}
+.rep-line{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:6px 0;border-bottom:1px solid #e5e5ea}.rep-v{font-weight:600}
+.rep-s{grid-column:1/-1;color:#6e6e73;font-size:13px}.rep-muscles{display:flex;flex-wrap:wrap;gap:6px}.rep-m{border:1px solid #d2d2d7;border-radius:8px;padding:2px 8px}
+.rep-day{padding:10px 0;border-bottom:1px solid #e5e5ea;break-inside:avoid}.rep-list{margin:2px 0 6px;padding-left:20px}.rep-title{font-size:20px}`;
 
 /* Historial de series de un músculo: últimas 12 semanas con la zona de 10 a 20 */
 SHEETS['vol-history'] = {
@@ -130,25 +232,61 @@ function drawVolHistory(m) {
   svg.addEventListener('pointerleave', () => { tip.hidden = true; });
 }
 
+async function copyText(ta, ok) {
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    toast(ok);
+  } catch (e) {
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); toast(ok); } catch (e2) { toast('Selecciona el texto y cópialo'); }
+  }
+}
+
 Object.assign(ACTIONS, {
-  'report-open': () => pushSheet({ type: 'report', monday: lastFullWeek() }),
-  'report-week': (el, top) => {
-    const next = addDays(top.monday, Number(el.dataset.d));
-    if (next > mondayOf(today())) return;
-    top.monday = next;
+  'report-open': () => pushSheet({ type: 'report', preset: 'lastweek', foods: false }),
+  'rep-preset': (el, top) => {
+    top.preset = el.dataset.v;
+    if (top.preset === 'custom' && !top.from) { top.to = today(); top.from = addDays(top.to, -13); }
     renderSheets();
   },
-  'report-copy': async () => {
-    const ta = $('#rep-text');
-    const text = ta.value;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('Informe copiado');
-    } catch (e) {
-      ta.focus();
-      ta.select();
-      try { document.execCommand('copy'); toast('Informe copiado'); } catch (e2) { toast('Selecciona el texto y cópialo'); }
+  'rep-range': (el, top) => {
+    const from = $('#rep-from')?.value;
+    const to = $('#rep-to')?.value;
+    if (!isDate(from) || !isDate(to)) return toast('Elige las dos fechas.');
+    if (from > to) return toast('La fecha «Desde» tiene que ser anterior a «Hasta».');
+    if (to > today()) return toast('La fecha «Hasta» no puede ser posterior a hoy.');
+    if (datesBetween(from, to).length > MAX_DAYS) return toast('Elige como mucho un año.');
+    Object.assign(top, { from, to });
+    renderSheets();
+  },
+  'rep-foods': (el, top) => { top.foods = !top.foods; renderSheets(); },
+  'rep-share': async () => {
+    const text = $('#rep-text').value;
+    if (navigator.share && window.matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
     }
+    await copyText($('#rep-text'), 'Informe copiado');
+  },
+  'rep-print': () => {
+    const doc = $('.sheet .rep-doc');
+    if (!doc || typeof window.print !== 'function') return toast('Este navegador no permite imprimir: usa «Archivo».');
+    // Se imprime solo el informe, en una capa aparte que se quita al terminar
+    let root = document.getElementById('print-root');
+    if (!root) { root = document.createElement('div'); root.id = 'print-root'; document.body.appendChild(root); }
+    root.innerHTML = doc.outerHTML;
+    document.documentElement.classList.add('printing');
+    const done = () => { document.documentElement.classList.remove('printing'); root.innerHTML = ''; window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    setTimeout(() => { try { window.print(); } catch (e) { done(); toast('No se ha podido abrir la impresión: usa «Archivo».'); } }, 50);
+  },
+  'rep-file': async () => {
+    const doc = $('.sheet .rep-doc');
+    if (!doc) return;
+    const title = doc.querySelector('.rep-title')?.textContent || 'Informe';
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><style>${FILE_CSS}</style></head><body>${doc.outerHTML}</body></html>`;
+    const name = `fitness-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.html`;
+    await deliverFile(name, html, 'text/html');
   },
   'vol-history': (el) => pushSheet({ type: 'vol-history', m: el.dataset.m }),
   'volh-m': (el, top) => { top.m = el.dataset.m; renderSheets(); },

@@ -12,7 +12,6 @@ import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, ren
 import { mapLegend } from './training.js';
 import { drawSeries } from './progress.js';
 import { actName, activitiesSorted } from './cardio.js';
-import { lastFullWeek } from './report.js';
 import { dataFromRows, rpc } from './sync.js';
 import { errorText, myProfile } from './account.js';
 import { drawExProgress, exProgressCard } from './exprogress.js';
@@ -81,7 +80,7 @@ function resumen() {
         ${r.steps.n ? line('Pasos', fmt(r.steps.avg), `media de ${plural(r.steps.n, 'día', 'días')}`) : ''}
       </div>
       ${vol.sets ? `<h3 class="list-title">Músculos trabajados</h3>${bodyPair(weekLevels(vol.vol), '', model())}${mapLegend('week')}` : ''}
-      <button type="button" class="btn ghost wide top-gap" data-act="fc-report">Informe semanal completo</button>
+      <button type="button" class="btn ghost wide top-gap" data-act="fc-report">Informe completo (por fechas)</button>
     </section>
     <section class="card">
       <div class="card-head"><h2>Sus objetivos</h2></div>
@@ -447,7 +446,7 @@ const readGoals = (pre, fields) => {
 };
 
 SHEETS['fc-report'] = {
-  title: () => 'Informe semanal',
+  title: () => 'Informe',
   render: (s) => (dataOf(s) ? withData(dataOf(s), () => SHEETS.report.render(s)) : ''),
 };
 
@@ -470,7 +469,7 @@ Object.assign(ACTIONS, {
     pushSheet({ type: 'fc-ph-compare', link: S.ui.client, pose, ...photoPair(S.ui.client, pose) });
   },
   'fc-ph-pose': (el, top) => { top.pose = el.dataset.v; Object.assign(top, photoPair(top.link, top.pose)); renderSheets(); },
-  'fc-report': () => pushSheet({ type: 'fc-report', link: S.ui.client, monday: lastFullWeek() }),
+  'fc-report': () => pushSheet({ type: 'fc-report', link: S.ui.client, preset: 'lastweek', foods: false }),
   'fc-note': (el) => {
     const n = (cache[S.ui.client]?.notes || []).find((x) => String(x.id) === el.dataset.id);
     pushSheet({ type: 'fc-note', link: S.ui.client, id: n?.id || null, body: n?.body || '', visible: n ? n.visible : false });

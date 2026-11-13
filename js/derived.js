@@ -274,14 +274,16 @@ export function workoutStats(w) {
   return { sets, tonnage };
 }
 
-export function weekVolume(monday) {
-  const end = addDays(monday, 6);
+export const weekVolume = (monday) => periodVolume(monday, addDays(monday, 6));
+
+// Series por músculo entre dos fechas (ambas incluidas)
+export function periodVolume(from, end) {
   const vol = Object.fromEntries(MUSCLES.map((m) => [m.k, 0]));
   const byMuscle = Object.fromEntries(MUSCLES.map((m) => [m.k, {}]));
   let sessions = 0;
   let sets = 0;
   for (const w of Object.values(S.workouts)) {
-    if (w.date < monday || w.date > end) continue;
+    if (w.date < from || w.date > end) continue;
     sessions++;
     for (const we of w.exercises) {
       const ex = getEx(we.exId);
@@ -512,6 +514,66 @@ export function weekReport(monday) {
     cardio: { count: acts.length, min: acts.reduce((a, x) => a + (x.min || 0), 0) },
     muscles: MUSCLES.map((m) => ({ k: m.k, l: m.l, v: vol.vol[m.k] })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v),
     measures,
+  };
+}
+
+/* ---------- informe por periodo ---------- */
+
+// Todas las fechas entre dos días, ambos incluidos
+export function datesBetween(from, to) {
+  const out = [];
+  for (let d = from; d <= to && out.length < 400; d = addDays(d, 1)) out.push(d);
+  return out;
+}
+const dayTotals = (entries) => entries.reduce((a, e) => {
+  for (const k of ['kcal', 'p', 'c', 'f']) a[k] += Number(e.n?.[k]) || 0;
+  return a;
+}, { kcal: 0, p: 0, c: 0, f: 0 });
+const byTime = (a, b) => String(a.start || a.at || '').localeCompare(String(b.start || b.at || ''));
+
+// Resumen de un periodo y lo que se hizo cada día (solo los días con algo apuntado)
+export function periodReport(from, to) {
+  const dates = datesBetween(from, to);
+  const n = dates.length;
+  const days = [];
+  for (const d of dates) {
+    const day = dayOf(d);
+    const workouts = Object.values(S.workouts).filter((w) => w.date === d && w.exercises?.length).sort(byTime);
+    const activities = Object.values(S.activities || {}).filter((a) => a.date === d).sort(byTime);
+    const weight = S.weights[d] ?? null;
+    const measures = S.measures[d] && MEASURES.some((m) => S.measures[d][m.k] != null) ? S.measures[d] : null;
+    const food = day.entries.length ? dayTotals(day.entries) : null;
+    const steps = day.steps ?? null;
+    const sleep = day.sleep ?? null;
+    if (!food && steps == null && sleep == null && weight == null && !workouts.length && !activities.length && !measures) continue;
+    days.push({ d, food, goals: food ? goalsFor(d) : null, entries: day.entries, steps, sleep, weight, workouts, activities, measures });
+  }
+  const logged = days.filter((x) => x.food);
+  const weights = days.filter((x) => x.weight != null);
+  const avgW = (list) => avgOf(list.map((x) => x.weight));
+  // Tendencia del peso: media de la primera semana frente a la última (solo con dos semanas o más)
+  let trend = null;
+  if (n >= 14) {
+    const a = weights.filter((x) => x.d < addDays(from, 7));
+    const b = weights.filter((x) => x.d > addDays(to, -7));
+    if (a.length && b.length) trend = avgW(b) - avgW(a);
+  }
+  const stepDays = days.filter((x) => x.steps != null);
+  const stepGoal = S.settings.goals.steps;
+  const sleeps = days.filter((x) => x.sleep != null);
+  const vol = periodVolume(from, to);
+  const acts = days.flatMap((x) => x.activities);
+  return {
+    from, to, n, days,
+    kcal: { n: logged.length, avg: avgOf(logged.map((x) => x.food.kcal)), goal: avgOf(logged.map((x) => x.goals.kcal).filter((v) => v != null)),
+      p: avgOf(logged.map((x) => x.food.p)), c: avgOf(logged.map((x) => x.food.c)), f: avgOf(logged.map((x) => x.food.f)) },
+    weight: { n: weights.length, avg: avgW(weights), first: weights[0] || null, last: weights[weights.length - 1] || null, trend },
+    steps: { n: stepDays.length, avg: avgOf(stepDays.map((x) => x.steps)), hit: stepGoal ? stepDays.filter((x) => x.steps >= stepGoal).length : null },
+    sleep: { n: sleeps.length, avg: avgOf(sleeps.map((x) => x.sleep)) },
+    strength: { sessions: days.reduce((a, x) => a + x.workouts.length, 0), sets: vol.sets },
+    cardio: { count: acts.length, min: acts.reduce((a, x) => a + (Number(x.min) || 0), 0) },
+    // Series por músculo: total del periodo y media por semana
+    muscles: MUSCLES.map((m) => ({ k: m.k, l: m.l, v: vol.vol[m.k], wk: (vol.vol[m.k] * 7) / n })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v),
   };
 }
 

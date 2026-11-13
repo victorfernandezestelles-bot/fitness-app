@@ -22,7 +22,7 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 - **Mapa de músculos**: un cuerpo de frente y de espalda (modelo de hombre o de mujer según Ajustes › Tu cuerpo) con lo trabajado y el hombro separado en cabezas. Sale al terminar cada entreno (principal y secundario), en cada entreno guardado, en el historial en cuadrícula y en la semana (por número de series).
 - **Cardio y actividades** (pestaña aparte en Entreno): caminata larga, carrera, bici, elíptica, comba, baloncesto, natación, movilidad u otra, con duración, intensidad y, si quieres, distancia y calorías. No suman series por músculo, pero el día cuenta como entrenado.
 - **Historial de series por músculo**: toca un músculo en Entreno para ver sus últimas 12 semanas con la zona de 10 a 20.
-- **Progreso**: informe semanal de lunes a domingo (peso, calorías, pasos, sueño, entrenos, series por músculo y medidas) que se puede copiar como texto, gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos y sueño de las últimas dos semanas y media de calorías.
+- **Progreso**: informe por periodo (últimos 7 días, semana pasada, últimos 30 días o las fechas que elijas): resumen de peso, calorías, macros, pasos, sueño, fuerza, cardio y series por músculo, y el detalle día a día con los entrenos completos (y, si se quiere, cada alimento); se comparte como texto, PDF o archivo .html, gráfica de peso con media de 7 días y medias semanales, gasto calórico real calculado con tus datos (o con fórmula mientras no haya suficientes) y calculadora de objetivo, medidas corporales con cintura/altura, hombros/cintura y % de grasa estimado, pasos y sueño de las últimas dos semanas y media de calorías.
 - **Ajustes** agrupados en objetivos, cuerpo, entreno, apariencia y datos. El texto sigue el tamaño del iPhone (o normal o grande) y hay opción de botones más grandes.
 - **Fotos de progreso privadas**: frente, lado y espalda por fecha, guardadas solo en el teléfono, con comparación lado a lado. Tienen su propia copia (.json aparte), porque no van en la copia normal.
 - **Tipos de cuenta**: desarrollador, entrenador, cliente (fase 2), usuario libre y pendiente de activar. Para usar la app hace falta un código de activación (caduca a los 7 días) o, más adelante, un entrenador. Una cuenta pendiente o bloqueada puede entrar, ver sus datos en solo lectura, descargarlos y borrar la cuenta. Desde Ajustes se puede solicitar ser entrenador.
@@ -48,7 +48,7 @@ Funciona como una web instalable (PWA). Los datos se guardan en el teléfono y, 
 | `js/settings.js` | Ajustes, copias e importación |
 | `js/onboarding.js` | Bienvenida de la primera vez |
 | `js/cardio.js` | Cardio y actividades |
-| `js/report.js` | Informe semanal e historial de series por músculo |
+| `js/report.js` | Informe por periodo (resumen y día a día; texto, PDF y .html) e historial de series por músculo |
 | `js/photos.js` | Fotos de progreso y su copia aparte |
 | `js/util.js` | Utilidades comunes |
 | `js/nutrients.js`, `js/exercises.js`, `js/templates.js` | Datos de referencia |

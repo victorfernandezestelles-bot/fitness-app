@@ -1114,3 +1114,17 @@ body.read-only .fab { display: none; }
 
 /* Con una hoja abierta, la barra de pestañas no desenfoca (en iOS provocaba pantallazos en negro con el teclado) */
 body.sheet-open .tabbar { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface); }
+
+/* Informe por periodo */
+.rep-title { font-size: var(--step-1); margin: 16px 0 6px; }
+.rep-day { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rep-day h4 { font-size: var(--step-0); margin-bottom: 4px; }
+.rep-day p { margin: 2px 0; }
+.rep-list { margin: 2px 0 6px; padding-left: 20px; font-size: var(--step--1); }
+.rep-actions .btn { min-width: 0; padding-left: 8px; padding-right: 8px; }
+#print-root { display: none; }
+@media print {
+  html.printing body > *:not(#print-root) { display: none !important; }
+  html.printing #print-root { display: block; color: #000; background: #fff; }
+  html.printing .rep-day { break-inside: avoid; }
+}
