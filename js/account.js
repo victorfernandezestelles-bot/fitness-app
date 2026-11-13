@@ -71,6 +71,9 @@ const ERRORS = {
   empty: 'Escribe algo antes de guardar.',
   violates_check: 'Algún dato no es válido (formato o tamaño).',
   bad_food: 'Revisa los valores: hace falta el valor energético y solo números.',
+  too_many: 'Has llegado al máximo permitido. Borra algo antes de añadir más.',
+  too_big: 'Es demasiado grande para guardarlo.',
+  rate_limit: 'Has hecho demasiados intentos hoy. Prueba mañana.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';

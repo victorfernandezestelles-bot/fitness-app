@@ -1,6 +1,8 @@
 # Servidor (Supabase)
 
-Archivos SQL para ejecutar en **SQL Editor** de Supabase, en orden. Cada uno se puede ejecutar más de una vez sin romper nada.
+Archivos SQL para ejecutar en **SQL Editor** de Supabase, en orden. Cada uno se puede ejecutar más de una vez sin romper nada, salvo `002`, que se niega a repetirse una vez instalada la fase 2 (y no cambia nada).
+
+**Regla importante:** varios archivos redefinen funciones de los anteriores (por ejemplo, `009` endurece funciones de `002`, `003`, `004`, `005`, `006`, `007` y `008`). Si vuelves a ejecutar uno, ejecuta después **todos los siguientes hasta el último**, en orden. Si no, esas funciones vuelven a su versión antigua, que es menos segura.
 
 | Archivo | Qué hace |
 |---|---|
@@ -11,7 +13,8 @@ Archivos SQL para ejecutar en **SQL Editor** de Supabase, en orden. Cada uno se 
 | `005-notas-objetivos.sql` | Fase 4: notas del entrenador (privadas o visibles para el cliente) y propuestas de objetivos que el cliente acepta o rechaza (ya ejecutado) |
 | `006-plantillas.sql` | Fase 5: plantillas del entrenador (planes del día y recetas) que comparte con los clientes que elija (ya ejecutado) |
 | `007-fotos.sql` | Fase 6: el cliente comparte con su entrenador las sesiones de fotos que quiera; se borran al terminar el vínculo (ya ejecutado) |
-| `008-alimentos-compartidos.sql` | Fase 7: base de alimentos de la app con los productos escaneados que no están en Open Food Facts, avisos de error y moderación |
+| `008-alimentos-compartidos.sql` | Fase 7: base de alimentos de la app con los productos escaneados que no están en Open Food Facts, avisos de error y moderación (ya ejecutado) |
+| `009-seguridad.sql` | Revisión de seguridad: las fotos compartidas solo pueden ser imágenes, la unidad de un alimento compartido no admite `< > " &`, un entrenador bloqueado deja de ver a sus clientes y no puede desvincularlos, una cuenta bloqueada no puede compartir fotos ni cambiar datos de su perfil, límites de tamaño (256 KB por dato y 20.000 datos por cuenta, 60 fotos compartidas por cliente, 30 alimentos nuevos al día, 10 solicitudes de vínculo al día, 500 notas por cliente y 50 propuestas cada 30 días), 15 días de plazo si se borra un entrenador desde el panel, el correo del entrenador ya no se enseña al cliente y códigos `FIT-`/`ENT-` con azar criptográfico |
 
 ## Hacer desarrollador una cuenta
 

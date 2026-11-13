@@ -161,6 +161,8 @@ function explain(e) {
   if (/validation_failed|invalid.*email|email_address_invalid/i.test(c)) return 'Ese correo no parece válido.';
   if (/over_.*rate_limit|rate limit|429/i.test(c)) return 'Demasiados intentos seguidos. Espera un minuto.';
   if (/signup_disabled/i.test(c)) return 'El servidor no admite cuentas nuevas ahora mismo.';
+  if (/too_big/.test(c)) return 'Hay un dato demasiado grande para sincronizarlo.';
+  if (/too_many/.test(c)) return 'Tu cuenta ha llegado al máximo de datos guardados.';
   return 'No se ha podido conectar con el servidor (' + (e.message || e.code) + ').';
 }
 

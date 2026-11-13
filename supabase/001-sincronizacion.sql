@@ -12,8 +12,13 @@ create table if not exists public.kv (
 create index if not exists kv_user_updated on public.kv (user_id, updated_at);
 alter table public.kv enable row level security;
 drop policy if exists "cada uno sus datos" on public.kv;
-create policy "cada uno sus datos" on public.kv for all to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+-- Esta regla solo vale antes de 002, que la sustituye por otras más estrictas: si 002 ya está, no se vuelve a crear
+do $$ begin
+  if to_regprocedure('public.is_active()') is null then
+    create policy "cada uno sus datos" on public.kv for all to authenticated
+      using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+  end if;
+end $$;
 grant select, insert, update, delete on public.kv to authenticated;
 create or replace function public.kv_touch() returns trigger
 language plpgsql set search_path = '' as $$

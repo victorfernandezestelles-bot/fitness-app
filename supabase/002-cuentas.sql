@@ -1,11 +1,18 @@
 -- 002 · Fase 1: tipos de cuenta, códigos de activación, solicitudes de entrenador y administración.
--- Se puede ejecutar más de una vez sin romper nada.
+-- Se ejecuta una sola vez, antes de 003 (si ya está la fase 2, se niega a repetirse sin cambiar nada).
 --
 -- Tipos de cuenta (role): dev (desarrollador), trainer (entrenador), client (cliente, fase 2),
 -- free (usuario libre, con código) y pending (pendiente de activar).
 -- Además, cualquier cuenta puede estar bloqueada (blocked).
 -- Solo las cuentas activas (no pending y no bloqueadas) pueden escribir sus datos;
 -- todas pueden leerlos, descargarlos y borrar su cuenta.
+
+-- Una vez instalada la fase 2 (003), este archivo ya no se puede repetir: 003 y 009 cambian sus funciones.
+do $$ begin
+  if to_regclass('public.links') is not null then
+    raise exception 'Este archivo ya está aplicado y no hace falta repetirlo. Si quieres reaplicar las reglas, ejecuta 003 y los siguientes.';
+  end if;
+end $$;
 
 /* ---------- perfiles ---------- */
 
