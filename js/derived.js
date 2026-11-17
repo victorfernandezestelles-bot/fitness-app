@@ -477,13 +477,15 @@ export function weeklyWeights(n = 8) {
   const out = [];
   let mon = mondayOf(today());
   for (let i = 0; i < n; i++) {
-    const vals = [];
-    for (let k = 0; k < 7; k++) { const v = S.weights[addDays(mon, k)]; if (v != null) vals.push(v); }
-    out.push({ mon, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length });
+    const w = weekWeight(mon);
+    out.push({ mon, avg: w.avg, count: w.n });
     mon = addDays(mon, -7);
   }
   return out; // de la más reciente a la más antigua
 }
+
+// Objetivos: clave, nombre y unidad (propuestas del entrenador y su vista en el cliente)
+export const GOAL_FIELDS = [['kcal', 'Calorías', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['f', 'Grasas', 'g'], ['steps', 'Pasos', '']];
 
 /* ---------- informe semanal ---------- */
 const avgOf = (v) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);

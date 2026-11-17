@@ -4,6 +4,7 @@
 import * as store from './store.js';
 import { $, dateShort, esc, localDay } from './util.js';
 import { GUARD, S, SAVED, saveSettings, wipeAll } from './state.js';
+import { GOAL_FIELDS } from './derived.js';
 import { ACCESS, ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { maybeOnboard } from './onboarding.js';
 import { SYNC_HOOKS, currentUser, isLoggedIn, rpc, signOutLocal, statusText, syncConfigured, syncNow } from './sync.js';
@@ -372,7 +373,6 @@ SHEETS['coach-notes'] = {
   },
 };
 
-const GOAL_ROWS = [['kcal', 'Calorías', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['f', 'Grasas', 'g'], ['steps', 'Pasos', '']];
 const goalCell = (v, u) => (v == null ? '<span class="muted">–</span>' : `${Math.round(v).toLocaleString('es-ES')}${u ? ' ' + u : ''}`);
 
 SHEETS['coach-proposal'] = {
@@ -390,11 +390,11 @@ SHEETS['coach-proposal'] = {
       ${pr.message ? `<p class="req-msg top-gap">${esc(pr.message)}</p>` : ''}
       <div class="table-wrap"><table class="nut-table prop-table">
         <thead><tr><th></th><th>Ahora</th><th>Propuesta</th></tr></thead>
-        <tbody>${GOAL_ROWS.map((r) => row(r, cur[r[0]] ?? null, pr.goals?.[r[0]] ?? null)).join('')}</tbody>
+        <tbody>${GOAL_FIELDS.map((r) => row(r, cur[r[0]] ?? null, pr.goals?.[r[0]] ?? null)).join('')}</tbody>
       </table></div>
       ${gt || Object.values(curT || {}).some((v) => v != null) ? `<h3 class="list-title">Días de entreno</h3>
       <div class="table-wrap"><table class="nut-table prop-table">
-        <tbody>${GOAL_ROWS.slice(0, 4).map((r) => row(r, curT?.[r[0]] ?? null, gt?.[r[0]] ?? null)).join('')}</tbody>
+        <tbody>${GOAL_FIELDS.slice(0, 4).map((r) => row(r, curT?.[r[0]] ?? null, gt?.[r[0]] ?? null)).join('')}</tbody>
       </table></div>
       ${gt ? '' : '<p class="hint">Si aceptas, tendrás los mismos objetivos todos los días.</p>'}` : ''}
       ${canAnswer ? `

@@ -1,16 +1,15 @@
 // Informe por periodo (resumen y día a día) e historial de series por músculo
 import { MUSCLES, MUSCLE_NAME } from './exercises.js';
-import { $, addDays, cap, dateLong, dateShort, deliverFile, durLabel, esc, fmt, isDate, parseISO, plural, today } from './util.js';
+import { $, addDays, cap, dateLong, dateShort, deliverFile, durLabel, esc, fmt, isDate, parseISO, plural, signed, today } from './util.js';
 import { MEALS, S } from './state.js';
 import { MEASURES, datesBetween, exName, isEffective, isSeg, mondayOf, muscleHistory, periodReport, qtyLabel, setsText, weekReport, workoutDuration } from './derived.js';
-import { ACTIONS, SHEETS, chartTooltip, pushSheet, render, renderSheets, toast } from './ui.js';
+import { ACTIONS, SHEETS, chartTooltip, pushSheet, render, renderSheets, repLine, toast } from './ui.js';
 import { tonIndOn, tonSwitch } from './training.js';
 import { actName } from './cardio.js';
 
 // La última semana completa: el informe de una semana sale el lunes siguiente
 export const lastFullWeek = () => addDays(mondayOf(today()), -7);
 
-const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v), d);
 const weekTitle = (mon) => `Semana del ${dateShort(mon)} al ${dateShort(addDays(mon, 6))}`;
 
 export function reportCard() {
@@ -29,9 +28,6 @@ export function reportCard() {
   </section>`;
 }
 
-function line(label, value, sub = '') {
-  return `<div class="rep-line"><span class="rep-l">${label}</span><span class="rep-v">${value}</span>${sub ? `<span class="rep-s">${sub}</span>` : ''}</div>`;
-}
 
 /* ---------- informe por periodo ---------- */
 
@@ -119,7 +115,7 @@ function reportHTML(r, withFoods) {
   }).join('');
   return `<div class="rep-doc">
     <h3 class="rep-title">${periodTitle(r.from, r.to)}</h3>
-    <div class="rep">${summaryLines(r).map(([l, v, sub]) => line(esc(l), esc(v), esc(sub))).join('')}</div>
+    <div class="rep">${summaryLines(r).map(([l, v, sub]) => repLine(esc(l), esc(v), esc(sub))).join('')}</div>
     ${muscles}
     <h3 class="list-title">Día a día</h3>
     ${days || '<p class="empty">No hay nada apuntado en estas fechas.</p>'}

@@ -1,7 +1,7 @@
 import { EXERCISES_BY_ID, MUSCLES, MUSCLE_NAME, e1rm } from './exercises.js';
 import { TEMPLATES } from './templates.js';
 import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
-import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
+import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverCsv, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
 import { SEG_LABEL, allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
@@ -661,7 +661,7 @@ export async function exportCsvEntrenos() {
       }
     }
   }
-  await deliverFile(`fitness-entrenos-${today()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  await deliverCsv('fitness-entrenos', rows);
 }
 
 /* ---------- cronómetro de descanso ---------- */

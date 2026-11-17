@@ -1,5 +1,5 @@
 // Cardio y otras actividades: no suman series por músculo, pero cuentan como día entrenado
-import { $, addDays, csvNum, csvText, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, num, today, uid } from './util.js';
+import { $, addDays, csvNum, csvText, dayLabel, deliverCsv, durLabel, esc, fmt, inputVal, num, today, uid } from './util.js';
 import { S, saveActivities } from './state.js';
 import { mondayOf } from './derived.js';
 import { ACTIONS, SHEETS, pageList, popSheet, pushSheet, render, renderSheets, toast, undoable } from './ui.js';
@@ -141,5 +141,5 @@ export async function exportCsvActividades() {
   for (const a of [...activitiesSorted()].reverse()) {
     rows.push([a.date, actName(a), a.min, INT_NAME[a.intensity] || '', csvNum(a.km, 2), a.kcal ?? '', a.note || ''].map(csvText).join(';'));
   }
-  await deliverFile(`fitness-actividades-${today()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  await deliverCsv('fitness-actividades', rows);
 }

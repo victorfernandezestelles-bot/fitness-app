@@ -369,29 +369,6 @@ export function statusText() {
   return 'Pendiente de sincronizar';
 }
 
-export function syncCard() {
-  if (!syncConfigured()) return '';
-  if (!auth) {
-    return `
-  <section class="card" id="aj-cuenta">
-    <div class="card-head"><h2>Cuenta</h2></div>
-    <p class="muted">Entra con tu correo para tener los mismos datos en el iPhone y en el ordenador. Lo que apuntes en uno aparece en el otro.</p>
-    <button type="button" class="btn wide top-gap" data-act="sync-login">Entrar o crear cuenta</button>
-  </section>`;
-  }
-  return `
-  <section class="card" id="aj-cuenta">
-    <div class="card-head"><h2>Cuenta</h2></div>
-    <p><b>${esc(auth.user.email || '')}</b></p>
-    <p class="muted" id="sync-status">${statusText()}</p>
-    <div class="btn-row two top-gap">
-      <button type="button" class="btn ghost" data-act="sync-now">Sincronizar ahora</button>
-      <button type="button" class="btn ghost" data-act="sync-logout">Cerrar sesión</button>
-    </div>
-    <p class="hint">Se sincroniza todo menos las fotos y los ajustes de apariencia, que son de cada dispositivo. Los datos se guardan en un servidor de la UE (Irlanda) y solo tu cuenta puede leerlos.</p>
-  </section>`;
-}
-
 SHEETS.login = {
   title: () => 'Tu cuenta',
   render: (s) => `

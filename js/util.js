@@ -54,7 +54,6 @@ export function dayLabel(s) {
   return l.charAt(0).toUpperCase() + l.slice(1);
 }
 
-export const SVGNS = 'http://www.w3.org/2000/svg';
 export function niceStep(range, target) {
   const raw = range / target;
   const pow = 10 ** Math.floor(Math.log10(raw));
@@ -81,7 +80,12 @@ export const csvText = (s) => {
   if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+([.,]\d+)?$/.test(t)) t = "'" + t; // que Excel no lo tome por una fórmula
   return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 };
+// Número con signo: +1,2 / −0,4 / ±0
+export const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v), d);
 export const csvNum = (n, d = 1) => (n == null ? '' : (Math.round(n * 10 ** d) / 10 ** d).toString().replace('.', ','));
+
+// .csv para Excel en español: con BOM (para los acentos) y saltos de línea de Windows
+export const deliverCsv = (name, rows) => deliverFile(`${name}-${today()}.csv`, '\ufeff' + rows.join('\r\n'), 'text/csv');
 
 export async function deliverFile(filename, text, mime) {
   const blob = new Blob([text], { type: mime });

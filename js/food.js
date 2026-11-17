@@ -4,7 +4,7 @@ import { checksumOk, decodeGray, imageDataToGray } from './barcode.js';
 import { $, addDays, cap, dateLong, dayLabel, esc, fmt, inputVal, iso, norm, num, plain, plural, today, uid } from './util.js';
 import { MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes, saveSettings, saveWeights } from './state.js';
 import { allFoods, dayMarks, dayOf, defaultQty, defaultUnit, ensureDay, favItems, favKey, getFood, goalsFor, guessMeal, hasTrainGoals, isFav, isTrainDay, itemName, needsBackup, nutFor, parseUnit, pluralEs, qtyLabel, recentItems, recipeTotals, unitCode } from './derived.js';
-import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, setTab, toast, undoable } from './ui.js';
+import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, selectChip, setTab, toast, undoable } from './ui.js';
 import { isLoggedIn, rpc } from './sync.js';
 import { accessState, coachNotice, errorText, linkNotice } from './account.js';
 
@@ -1042,7 +1042,7 @@ Object.assign(ACTIONS, {
   },
   'qty-meal': async (el, top, act) => {
       top.meal = el.dataset.meal;
-      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      selectChip(el);
       return;
   },
   'qty-save': async (el, top, act) => {

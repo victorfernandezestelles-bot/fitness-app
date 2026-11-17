@@ -7,7 +7,7 @@ import { GUARD, MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes } from './s
 import { ensureDay, recipeTotals } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
-import { coachInbox, errorText, markTemplatesSeen, templatesSeen } from './account.js';
+import { coachInbox, errorText, markTemplatesSeen } from './account.js';
 
 const KIND = { plan: 'Plan del día', recipe: 'Receta' };
 
@@ -183,11 +183,6 @@ let clientTplsError = '';
 async function loadClientTpls() {
   clientTplsError = '';
   try { clientTpls = cleanData(await rpc('client_templates')); } catch (e) { clientTplsError = errorText(e); }
-}
-
-export function tplNew() {
-  const seen = templatesSeen();
-  return (coachInbox()?.templates || []).filter((t) => t.at > seen).length;
 }
 
 SHEETS['coach-tpls'] = {

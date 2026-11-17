@@ -80,6 +80,14 @@ export function render() {
   try { v.after?.(); } catch (e) { console.error(e); }
 }
 
+// Una línea de resumen: etiqueta, valor y, si hay, una nota debajo (los textos ya vienen escapados)
+export const repLine = (label, value, sub = '') => `<div class="rep-line"><span class="rep-l">${label}</span><span class="rep-v">${value}</span>${sub ? `<span class="rep-s">${sub}</span>` : ''}</div>`;
+
+// Marca el chip pulsado dentro de su grupo
+export function selectChip(el) {
+  el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+}
+
 export function chartTooltip(host) {
   let tip = host.querySelector('.tip');
   if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; host.appendChild(tip); }

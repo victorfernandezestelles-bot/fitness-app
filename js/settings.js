@@ -1,8 +1,8 @@
 import { MACROS, MICROS, sumNut } from './nutrients.js';
-import { $, APP_VERSION, csvNum, csvText, dateLong, deliverFile, fmt, inputVal, localDay, num, plural, restLabel, today } from './util.js';
+import { $, APP_VERSION, csvNum, csvText, dateLong, deliverCsv, deliverFile, fmt, inputVal, localDay, num, plural, restLabel, today } from './util.js';
 import { MEAL_NAME, S, SCHEMA, flushAll, replaceAll, saveSettings, snapshot, wipeAll } from './state.js';
 import { ACTIVITY, dayOf, parseUnit, pluralEs } from './derived.js';
-import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, toast } from './ui.js';
+import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, selectChip, toast } from './ui.js';
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
 import { exportPhotos, importPhotos } from './photos.js';
@@ -159,7 +159,7 @@ export async function exportCsvDiario() {
         ...[...MACROS, ...MICROS].map((n) => csvNum(e.n[n.k], n.k === 'kcal' ? 0 : 2))].map(csvText).join(';'));
     }
   }
-  await deliverFile(`fitness-comidas-${today()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  await deliverCsv('fitness-comidas', rows);
 }
 
 export async function exportCsvResumen() {
@@ -171,7 +171,7 @@ export async function exportCsvResumen() {
     rows.push([d, csvNum(tot.kcal, 0), csvNum(tot.p), csvNum(tot.c), csvNum(tot.f), csvNum(tot.fi), csvNum(tot.sal, 2),
       day.steps ?? '', csvNum(S.weights[d], 2)].join(';'));
   }
-  await deliverFile(`fitness-resumen-${today()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  await deliverCsv('fitness-resumen', rows);
 }
 
 export async function importFile(file) {
@@ -221,7 +221,7 @@ Object.assign(ACTIONS, {
       S.settings.theme = el.dataset.v;
       saveSettings();
       applyTheme();
-      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      selectChip(el);
   },
   'export-csv-actividades': () => exportCsvActividades(),
   'export-photos': () => exportPhotos(),
@@ -230,7 +230,7 @@ Object.assign(ACTIONS, {
       S.settings.textSize = el.dataset.v;
       saveSettings();
       applyTheme();
-      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      selectChip(el);
   },
   'aj-jump': (el) => {
       const t = document.getElementById('aj-' + el.dataset.k);
@@ -239,14 +239,14 @@ Object.assign(ACTIONS, {
   'rest-default': async (el, top, act) => {
       S.settings.rest = Number(el.dataset.s);
       saveSettings();
-      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      selectChip(el);
       toast(`Descanso por defecto: ${restLabel(S.settings.rest)}`);
       return;
   },
   'sex': async (el, top, act) => {
       S.settings.profile.sex = el.dataset.v;
       saveSettings();
-      el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+      selectChip(el);
       return;
   },
   'import': async (el, top, act) => {

@@ -3,7 +3,7 @@ import { TEMPLATES } from './templates.js';
 import { $, esc, inputVal, num, today } from './util.js';
 import { S, saveSettings, saveWeights } from './state.js';
 import { ACTIVITY } from './derived.js';
-import { ACTIONS, SHEETS, closeSheets, pushSheet, render, renderSheets } from './ui.js';
+import { ACTIONS, SHEETS, closeSheets, pushSheet, render, renderSheets, selectChip } from './ui.js';
 import { addTemplate, templateAdded } from './training.js';
 
 const STEPS = ['Tus objetivos', 'Tu cuerpo', 'Tus rutinas', 'Tus datos'];
@@ -116,7 +116,7 @@ Object.assign(ACTIONS, {
   'ob-sex': (el) => {
     S.settings.profile.sex = el.dataset.v;
     saveSettings();
-    el.parentElement.querySelectorAll('.chip').forEach((c) => { const on = c === el; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+    selectChip(el);
   },
   'ob-tpl': (el) => {
     const t = TEMPLATES.find((x) => x.id === el.dataset.id);

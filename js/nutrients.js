@@ -34,12 +34,6 @@ export function kcalFrom(n) {
   return Math.round(4 * p + 4 * c + 9 * f + 2 * fi);
 }
 
-export function emptyNut() {
-  const o = {};
-  for (const k of KEYS) o[k] = null;
-  return o;
-}
-
 // Nutrientes de "g" gramos de un alimento con valores por 100 g
 export function scale(per100, g) {
   const o = {};

@@ -4,11 +4,11 @@
 // Para pintar se reutilizan los cálculos de la app: mientras se genera el HTML, S apunta un momento
 // a los datos del cliente y vuelve a los propios al terminar (es síncrono: nada se guarda ni se sincroniza entremedias).
 import { bodyPair } from './bodymap.js';
-import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, localDay, num, parseISO, plural, today } from './util.js';
+import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, localDay, num, parseISO, plural, signed, today } from './util.js';
 import { MEALS, S } from './state.js';
-import { MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutsSorted } from './derived.js';
-import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
-import { mapLegend, workoutMuscles } from './training.js';
+import { GOAL_FIELDS, MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutsSorted } from './derived.js';
+import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, repLine, toast } from './ui.js';
+import { bodyModel, mapLegend, workoutMuscles } from './training.js';
 import { drawSeries } from './progress.js';
 import { actName, activitiesSorted } from './cardio.js';
 import { dataFromRows, rpc } from './sync.js';
@@ -49,11 +49,8 @@ export async function loadFicha(id, force = false) {
 }
 export function forgetFichas() { for (const k of Object.keys(cache)) delete cache[k]; fullCache.clear(); }
 
-const model = () => (S.settings.profile?.sex === 'm' ? 'mujer' : 'hombre');
 const sumDay = (day) => day.entries.reduce((a, e) => { for (const k of ['kcal', 'p', 'c', 'f']) a[k] += e.n?.[k] || 0; return a; }, { kcal: 0, p: 0, c: 0, f: 0 });
 const of = (v, goal, unit = '', d = 0) => `${fmt(v, d)}${unit}${goal != null ? ` <small class="muted">/ ${fmt(goal, d)}${unit}</small>` : ''}`;
-const line = (label, value, sub = '') => `<div class="rep-line"><span class="rep-l">${label}</span><span class="rep-v">${value}</span>${sub ? `<span class="rep-s">${sub}</span>` : ''}</div>`;
-const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v), d);
 
 /* ---------- resumen ---------- */
 
@@ -70,15 +67,15 @@ function resumen() {
     <section class="card">
       <div class="card-head"><h2>Esta semana</h2><span class="muted">${dateShort(mon)} – ${dateShort(addDays(mon, 6))}</span></div>
       <div class="rep">
-        ${line('Días apuntados', `${r.kcal.n} de ${sofar}`)}
-        ${line('Calorías', r.kcal.n ? `${fmt(r.kcal.avg)} kcal` : '–', r.kcal.n ? `media${r.kcal.goal ? ` · objetivo ${fmt(r.kcal.goal)}` : ''}` : '')}
-        ${r.kcal.n ? line('Proteínas', `${fmt(r.kcal.protein)} g`, `media${g.p != null ? ` · objetivo ${fmt(g.p)} g` : ''}`) : ''}
-        ${line('Peso', r.weight.avg != null ? `${fmt(r.weight.avg, 1)} kg` : '–', r.weight.avg != null ? `media de ${plural(r.weight.n, 'pesada', 'pesadas')}${r.weight.change != null ? ` · ${signed(r.weight.change)} kg frente a la anterior` : ''}` : 'sin pesadas')}
-        ${line('Fuerza', plural(r.strength.sessions, 'sesión', 'sesiones'), `${r.strength.sets} series efectivas`)}
-        ${r.cardio.count ? line('Cardio y actividades', plural(r.cardio.count, 'actividad', 'actividades'), durLabel(r.cardio.min * 60000)) : ''}
-        ${r.steps.n ? line('Pasos', fmt(r.steps.avg), `media de ${plural(r.steps.n, 'día', 'días')}`) : ''}
+        ${repLine('Días apuntados', `${r.kcal.n} de ${sofar}`)}
+        ${repLine('Calorías', r.kcal.n ? `${fmt(r.kcal.avg)} kcal` : '–', r.kcal.n ? `media${r.kcal.goal ? ` · objetivo ${fmt(r.kcal.goal)}` : ''}` : '')}
+        ${r.kcal.n ? repLine('Proteínas', `${fmt(r.kcal.protein)} g`, `media${g.p != null ? ` · objetivo ${fmt(g.p)} g` : ''}`) : ''}
+        ${repLine('Peso', r.weight.avg != null ? `${fmt(r.weight.avg, 1)} kg` : '–', r.weight.avg != null ? `media de ${plural(r.weight.n, 'pesada', 'pesadas')}${r.weight.change != null ? ` · ${signed(r.weight.change)} kg frente a la anterior` : ''}` : 'sin pesadas')}
+        ${repLine('Fuerza', plural(r.strength.sessions, 'sesión', 'sesiones'), `${r.strength.sets} series efectivas`)}
+        ${r.cardio.count ? repLine('Cardio y actividades', plural(r.cardio.count, 'actividad', 'actividades'), durLabel(r.cardio.min * 60000)) : ''}
+        ${r.steps.n ? repLine('Pasos', fmt(r.steps.avg), `media de ${plural(r.steps.n, 'día', 'días')}`) : ''}
       </div>
-      ${vol.sets ? `<h3 class="list-title">Músculos trabajados</h3>${bodyPair(weekLevels(vol.vol), '', model())}${mapLegend('week')}` : ''}
+      ${vol.sets ? `<h3 class="list-title">Músculos trabajados</h3>${bodyPair(weekLevels(vol.vol), '', bodyModel())}${mapLegend('week')}` : ''}
       <button type="button" class="btn ghost wide top-gap" data-act="fc-report">Informe completo (por fechas)</button>
     </section>
     <section class="card">
@@ -180,7 +177,7 @@ function progreso() {
     const lastD = ds[ds.length - 1];
     const v = S.measures[lastD][m.k];
     const first = ds.length > 1 ? S.measures[ds[0]][m.k] : null;
-    return line(m.l, `${fmt(v, 1)} ${m.u}`, `${dateShort(lastD)}${first != null ? ` · ${signed(v - first)} ${m.u} desde el ${dateShort(ds[0])}` : ''}`);
+    return repLine(m.l, `${fmt(v, 1)} ${m.u}`, `${dateShort(lastD)}${first != null ? ` · ${signed(v - first)} ${m.u} desde el ${dateShort(ds[0])}` : ''}`);
   }).filter(Boolean);
   return `
     <section class="card">
@@ -286,7 +283,6 @@ CHANGES['fc-ph-which'] = (el, top) => { if (top?.type === 'fc-ph-compare') { top
 
 /* ---------- notas y objetivos ---------- */
 
-const GOAL_FIELDS = [['kcal', 'Calorías', 'kcal'], ['p', 'Proteínas', 'g'], ['c', 'Hidratos', 'g'], ['f', 'Grasas', 'g'], ['steps', 'Pasos', '']];
 const canWriteCoach = () => ['trainer', 'dev'].includes(myProfile()?.role);
 export const goalsText = (g, keys = GOAL_FIELDS) => keys.filter(([k]) => g?.[k] != null).map(([k, l, u]) => `${fmt(g[k])}${u ? ' ' + u : ''} ${k === 'kcal' ? '' : k === 'steps' ? 'pasos' : l.toLowerCase()}`.trim()).join(' · ');
 
@@ -369,7 +365,7 @@ SHEETS['fc-workout'] = {
           <div><span class="stat-l">Series</span><span class="stat-v">${st.sets}</span></div>
           <div><span class="stat-l">Kg movidos</span><span class="stat-v">${fmt(st.tonnage)}</span></div>
         </div>
-        ${bodyPair(workoutLevels(w), 'big', model())}
+        ${bodyPair(workoutLevels(w), 'big', bodyModel())}
         ${mapLegend('session')}
         ${workoutMuscles(w)}
         <h3 class="list-title">Ejercicios</h3>
