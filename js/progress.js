@@ -377,18 +377,19 @@ export function viewMeasures() {
   </section>`;
 }
 
-export function drawSeries(host, pts, unit, dec = 1) {
+// Gráfica de línea con puntos (peso del cliente, medidas, mejor serie de un ejercicio).
+// pts: [{ d: 'AAAA-MM-DD', v }]; spread: margen mínimo del eje para que una línea casi plana no parezca un pico
+export function drawSeries(host, pts, unit, dec = 1, { H = 160, spread = 2, label = `Evolución en ${unit}` } = {}) {
   if (!host) return;
   if (pts.length < 2) { host.innerHTML = ''; return; }
   const W = Math.max(280, host.clientWidth);
-  const H = 160;
   const m = { l: 38, r: 12, t: 12, b: 24 };
   const t0 = parseISO(pts[0].d).getTime();
   const t1 = Math.max(parseISO(pts[pts.length - 1].d).getTime(), t0 + 864e5);
   const xs = (d) => m.l + ((parseISO(d).getTime() - t0) / (t1 - t0)) * (W - m.l - m.r);
   let lo = Math.min(...pts.map((p) => p.v));
   let hi = Math.max(...pts.map((p) => p.v));
-  if (hi - lo < 2) { const c = (hi + lo) / 2; lo = c - 1; hi = c + 1; }
+  if (hi - lo < spread) { const c = (hi + lo) / 2; lo = c - spread / 2; hi = c + spread / 2; }
   const step = niceStep(hi - lo, 4);
   lo = Math.floor(lo / step) * step;
   hi = Math.ceil(hi / step) * step;
@@ -401,7 +402,7 @@ export function drawSeries(host, pts, unit, dec = 1) {
   g += `<text class="axis" x="${m.l}" y="${H - 6}">${dateShort(pts[0].d)}</text><text class="axis" x="${W - m.r}" y="${H - 6}" text-anchor="end">${dateShort(pts[pts.length - 1].d)}</text>`;
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${xs(p.d).toFixed(1)},${ys(p.v).toFixed(1)}`).join('');
   const dots = pts.map((p) => `<circle class="w-end" cx="${xs(p.d).toFixed(1)}" cy="${ys(p.v).toFixed(1)}" r="3.5"/>`).join('');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Evolución en ${unit}">${g}<path class="w-avg" d="${path}"/>${dots}</svg>`;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${label}">${g}<path class="w-avg" d="${path}"/>${dots}</svg>`;
 }
 
 /* Nueva medición o editar una existente */

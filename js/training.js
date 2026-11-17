@@ -1,11 +1,12 @@
 import { EXERCISES_BY_ID, MUSCLES, MUSCLE_NAME, e1rm } from './exercises.js';
 import { TEMPLATES } from './templates.js';
 import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
-import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverCsv, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
+import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverCsv, durLabel, esc, fmt, inputVal, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
 import { SEG_LABEL, allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
 import { bar } from './food.js';
+import { drawSeries } from './progress.js';
 import { viewCardio } from './cardio.js';
 
 setInterval(() => {
@@ -554,32 +555,8 @@ SHEETS['ex-history'] = {
 };
 
 export function drawExChart(exId) {
-  const host = $('#ex-chart');
-  if (!host) return;
-  const pts = exerciseHistory(exId).filter((h) => h.best != null).reverse();
-  if (pts.length < 2) { host.innerHTML = ''; return; }
-  const W = Math.max(280, host.clientWidth);
-  const H = 170;
-  const m = { l: 38, r: 12, t: 12, b: 24 };
-  const t0 = parseISO(pts[0].date).getTime();
-  const t1 = Math.max(parseISO(pts[pts.length - 1].date).getTime(), t0 + 864e5);
-  const xs = (d) => m.l + ((parseISO(d).getTime() - t0) / (t1 - t0)) * (W - m.l - m.r);
-  let lo = Math.min(...pts.map((p) => p.best));
-  let hi = Math.max(...pts.map((p) => p.best));
-  if (hi - lo < 5) { lo -= 2.5; hi += 2.5; }
-  const step = niceStep(hi - lo, 4);
-  lo = Math.floor(lo / step) * step;
-  hi = Math.ceil(hi / step) * step;
-  const ys = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
-  let g = '';
-  for (let v = lo; v <= hi + 1e-9; v += step) {
-    const y = ys(v).toFixed(1);
-    g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${fmt(v)}</text>`;
-  }
-  g += `<text class="axis" x="${m.l}" y="${H - 6}">${dateShort(pts[0].date)}</text><text class="axis" x="${W - m.r}" y="${H - 6}" text-anchor="end">${dateShort(pts[pts.length - 1].date)}</text>`;
-  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${xs(p.date).toFixed(1)},${ys(p.best).toFixed(1)}`).join('');
-  const dots = pts.map((p) => `<circle class="w-end" cx="${xs(p.date).toFixed(1)}" cy="${ys(p.best).toFixed(1)}" r="3.5"/>`).join('');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Evolución del 1RM estimado">${g}<path class="w-avg" d="${path}"/>${dots}</svg>`;
+  const pts = exerciseHistory(exId).filter((h) => h.best != null).reverse().map((h) => ({ d: h.date, v: h.best }));
+  drawSeries($('#ex-chart'), pts, 'kg', 0, { H: 170, spread: 5, label: 'Evolución del 1RM estimado' });
 }
 
 /* Rutinas */
