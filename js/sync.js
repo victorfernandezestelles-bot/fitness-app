@@ -5,9 +5,9 @@
 // ahí se juntan las comidas de los dos.
 import * as store from './store.js';
 import { SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { $, cleanData, esc, isDate, plain } from './util.js';
-import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout } from './state.js';
-import { ACTIONS, FORMS, HOOKS, SHEETS, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
+import { $, cleanData, esc, isDate, plain, uid } from './util.js';
+import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout, wipeAll } from './state.js';
+import { ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { keepAwake } from './training.js';
 
 export const syncConfigured = () => !!(SUPABASE_URL && SUPABASE_KEY);
@@ -199,7 +199,11 @@ async function ensureToken(force = false) {
     await saveAuth();
   } catch (e) {
     if (e.code !== 'offline' && e.status >= 400 && e.status < 500) {
-      await signOutLocal();
+      epoch++;
+      auth = null;
+      await store.del('sync:auth');
+      setStatus('off');
+      SYNC_HOOKS.auth.forEach((fn) => fn(false));
       throw new SyncError('La sesión ha caducado. Vuelve a entrar.', 'expired', 401);
     }
     throw e;
@@ -248,15 +252,18 @@ export async function syncNow({ quiet = true } = {}) {
   if (!syncConfigured() || !auth) return;
   if (running) { again = true; return; }
   running = true;
+  const mine = epoch;
+  const stale = () => epoch !== mine || !auth;
   setStatus('syncing');
   let changed = 0, sent = 0, tooNew = false;
   try {
     for (const fn of SYNC_HOOKS.cycle) await fn();
-    if (!auth) return;
+    if (stale()) return;
     flushAll();
     const first = !lastPull;
     const since = lastPull ? new Date(Date.parse(lastPull) - 10000).toISOString() : null;
     const remote = await pullSince(since);
+    if (stale()) return;
     const local = rowsOf();
     for (const r of remote) {
       if (!lastPull || r.updated_at > lastPull) lastPull = r.updated_at;
@@ -293,15 +300,18 @@ export async function syncNow({ quiet = true } = {}) {
     }
     if (ops.length) {
       await push(ops);
+      if (stale()) return;
       for (const [k, h] of Object.entries(hashes)) { if (h == null) delete shadow[k]; else shadow[k] = h; }
       sent = ops.length;
     }
     // Aunque la cuenta esté vacía, la primera sincronización ya está hecha
     if (!lastPull) lastPull = '1970-01-01T00:00:10.000Z';
+    if (stale()) return;
     await store.put('sync:shadow', shadow);
     await store.put('sync:last', lastPull);
     if (tooNew) setStatus('update', 'Otro dispositivo usa una versión más nueva de la app. Actualiza esta para sincronizar todo.');
     else setStatus('ok');
+    for (const fn of [...afterSync]) { afterSync.delete(fn); try { fn(); } catch (e2) { console.error(e2); } }
     if (changed) refreshView();
     if (!quiet) toast(changed || sent ? `Sincronizado: ${changed} ${changed === 1 ? 'cambio recibido' : 'cambios recibidos'}, ${sent} ${sent === 1 ? 'enviado' : 'enviados'}` : 'Todo está al día');
   } catch (e) {
@@ -327,7 +337,36 @@ function schedule(ms = 3000) {
   timer = setTimeout(() => syncNow(), ms);
 }
 
+// Cuenta dueña de los datos que hay ahora en el teléfono
+const OWNER = 'sync:owner';
+export const currentUserId = () => auth?.user?.id || null;
+// Cambia al cerrar o perder la sesión y al borrar los datos: una sincronización que empezó antes ya no aplica ni guarda nada
+let epoch = 0;
+// Espera a que termine la sincronización en marcha, si la hay
+export async function waitIdle() {
+  for (let i = 0; running && i < 600; i++) await new Promise((r) => setTimeout(r, 100));
+}
+// Lo que hay que hacer cuando termine bien la primera sincronización (por ejemplo, decidir si sale la bienvenida)
+const afterSync = new Set();
+export const hasSynced = () => !!lastPull;
+export function whenSynced(fn) {
+  if (!auth || lastPull) fn();
+  else afterSync.add(fn);
+}
+
+// Cambios de este teléfono que aún no están en el servidor (aunque ahora no se puedan subir)
+export function pendingCount() {
+  if (!syncConfigured()) return 0;
+  flushAll();
+  const now = rowsOf();
+  let n = 0;
+  for (const [key, value] of Object.entries(now)) if (shadow[key] !== hash(value)) n++;
+  for (const key of Object.keys(shadow)) if (!(key in now)) n++;
+  return n;
+}
+
 export async function signOutLocal() {
+  epoch++;
   auth = null;
   shadow = {};
   lastPull = null;
@@ -346,6 +385,10 @@ export async function initSync() {
     lastPull = (await store.get('sync:last')) || null;
   } catch (e) { auth = null; }
   if (!auth) return;
+  // Versiones anteriores no apuntaban de quién son los datos: son de la cuenta con la sesión abierta
+  try {
+    if (!(await store.get(OWNER))) { await store.put(OWNER, auth.user.id); await claimPhotos(auth.user.id); }
+  } catch (e) { /* sin almacén */ }
   setStatus('idle');
   syncNow();
 }
@@ -353,7 +396,7 @@ export async function initSync() {
 setInterval(() => { if (auth && document.visibilityState === 'visible') syncNow(); }, 60000);
 
 SAVED.push((key) => {
-  if (key === '!wipe') { auth = null; shadow = {}; lastPull = null; setStatus('off'); return; }
+  if (key === '!wipe') { epoch++; auth = null; shadow = {}; lastPull = null; setStatus('off'); return; }
   if (!String(key).startsWith('sync:') && !String(key).startsWith('backup:') && key !== 'meta') schedule();
 });
 HOOKS.visible.push(() => schedule(500));
@@ -383,8 +426,31 @@ SHEETS.login = {
         <button type="submit" class="btn primary" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Un momento…' : 'Entrar'}</button>
       </div>
     </form>
-    <p class="hint">Al entrar, lo que tengas en este dispositivo se junta con lo que ya haya en tu cuenta. Nada se borra.</p>`,
+    <p class="hint">Al entrar se descargan los datos de tu cuenta. Si en este teléfono quedaban datos de otra cuenta, se borran del teléfono (no de esa cuenta) para que no se mezclen.</p>`,
 };
+
+// Las fotos sin dueño (de versiones anteriores) pasan a ser de esta cuenta
+async function claimPhotos(uid) {
+  try {
+    for (const x of await store.photoSets()) if (!x.owner) await store.photoPut('set:' + x.id, { ...x, owner: uid });
+  } catch (e) { /* sin fotos */ }
+}
+
+// Cierra la sesión y borra los datos de este teléfono. Se quedan las fotos (cada una a nombre de su cuenta)
+// y los ajustes de este dispositivo (tema, tamaño del texto, botones grandes y pantalla encendida)
+async function logoutAndWipe({ lost = false } = {}) {
+  const keep = Object.fromEntries(['theme', 'textSize', 'bigButtons', 'keepAwake'].filter((k) => S.settings[k] !== undefined).map((k) => [k, S.settings[k]]));
+  const token = auth?.access_token;
+  if (token) apiCall('/auth/v1/logout', { method: 'POST', token }).catch(() => {});
+  await signOutLocal();
+  await wipeAll({ photos: 'keep' });
+  await store.del(OWNER);
+  Object.assign(S.settings, keep);
+  try { await store.put('settings', S.settings); } catch (e) { /* sin almacén */ }
+  applyTheme();
+  render();
+  toast(lost ? 'Sesión cerrada.' : 'Sesión cerrada. Tus datos siguen en tu cuenta.');
+}
 
 async function doLogin(top, mode) {
   const email = $('#lg-email').value.trim().toLowerCase();
@@ -403,10 +469,17 @@ async function doLogin(top, mode) {
       ? await apiCall('/auth/v1/signup', { method: 'POST', body: { email, password, data: { name: top.name || '' } } })
       : await apiCall('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
     if (mode === 'signup' && !res?.access_token) throw new SyncError('Falta confirmar', 'email_not_confirmed', 400);
-    shadow = {};
-    lastPull = null;
+    // Datos de otra cuenta, o de nadie conocido, se borran antes de entrar: nunca se mezclan ni se suben a esta.
+    // Si es la misma cuenta (por ejemplo, tras caducar la sesión), sigue donde estaba y sube lo pendiente.
+    const owner = await store.get(OWNER);
+    const same = owner && owner === res.user?.id;
+    const hasLocal = Object.keys(rowsOf()).length > 1;
+    if (!same && (owner || hasLocal)) await wipeAll({ photos: 'keep' });
+    shadow = (same && (await store.get('sync:shadow'))) || {};
+    lastPull = (same && (await store.get('sync:last'))) || null;
     setSession(res);
     await saveAuth();
+    await store.put(OWNER, auth.user.id);
     popSheet();
     for (const fn of SYNC_HOOKS.auth) await fn(true);
     render();
@@ -427,14 +500,36 @@ Object.assign(ACTIONS, {
   'sync-now': () => syncNow({ quiet: false }),
   'sync-logout': () => pushSheet({
     type: 'confirm', title: 'Cerrar sesión', ok: 'Cerrar sesión',
-    text: 'Los datos se quedan en este dispositivo y en tu cuenta, pero dejarán de sincronizarse aquí hasta que vuelvas a entrar.',
+    text: 'Antes de salir se suben tus últimos cambios. Después, tus datos se borran de este teléfono: siguen en tu cuenta y vuelven cuando entres de nuevo. Tus fotos se quedan en el teléfono a tu nombre: otra cuenta no las verá.',
     onOk: async () => {
+      const before = pendingCount();
+      toast('Subiendo tus cambios…');
+      await waitIdle();
       await syncNow();
-      const token = auth?.access_token;
-      if (token) apiCall('/auth/v1/logout', { method: 'POST', token }).catch(() => {});
-      await signOutLocal();
-      render();
-      toast('Sesión cerrada');
+      await waitIdle();
+      const cambios = (k) => (k === 1 ? '1 cambio que todavía no está' : `${k} cambios que todavía no están`);
+      if (!auth) {
+        // La sesión ha caducado al intentar subir: no se borra nada
+        if (before) {
+          pushSheet({ type: 'confirm', title: 'Tu sesión ha caducado', ok: 'Volver a entrar',
+            text: `Hay ${cambios(before)} en tu cuenta. No he borrado nada de este teléfono: vuelve a entrar con tu cuenta para subirlos, o guarda antes una copia en Ajustes › Tus datos.`,
+            onOk: () => pushSheet({ type: 'login', mode: 'login' }) });
+          return;
+        }
+        await logoutAndWipe();
+        return;
+      }
+      const n = pendingCount();
+      if (!n) { await logoutAndWipe(); return; }
+      // Quedan cambios que solo están aquí: no se pierden sin avisar
+      const inactive = !SYNC_HOOKS.canPush();
+      pushSheet({
+        type: 'confirm', title: 'Hay cambios sin subir', ok: 'Cerrar sesión y perderlos', danger: true,
+        text: inactive
+          ? `Hay ${cambios(n)} en tu cuenta y, como tu cuenta no está activa, no se pueden subir. Si cierras sesión se perderán. Antes, guarda una copia en Ajustes › Tus datos.`
+          : `Hay ${cambios(n)} en tu cuenta (puede que no haya conexión). Si cierras sesión ahora, se perderán. Mejor espera a tener conexión y vuelve a intentarlo.`,
+        onOk: () => logoutAndWipe({ lost: true }),
+      });
     },
   }),
 });

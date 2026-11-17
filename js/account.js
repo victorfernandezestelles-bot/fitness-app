@@ -7,7 +7,7 @@ import { GUARD, S, SAVED, saveSettings, wipeAll } from './state.js';
 import { GOAL_FIELDS } from './derived.js';
 import { ACCESS, ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { maybeOnboard } from './onboarding.js';
-import { SYNC_HOOKS, currentUser, isLoggedIn, rpc, signOutLocal, statusText, syncConfigured, syncNow } from './sync.js';
+import { SYNC_HOOKS, currentUser, currentUserId, isLoggedIn, rpc, signOutLocal, statusText, syncConfigured, syncNow } from './sync.js';
 
 export const ROLE_NAME = { dev: 'Desarrollador', trainer: 'Entrenador', client: 'Cliente', free: 'Usuario libre', pending: 'Pendiente de activar' };
 
@@ -498,9 +498,10 @@ FORMS['acct-delete'] = async (form, top) => {
     return;
   }
   // La cuenta ya está borrada en el servidor: aunque falle algo al limpiar el teléfono, se sale de esta pantalla
+  const me = currentUserId();
   try {
     await signOutLocal();
-    await wipeAll();
+    await wipeAll({ photos: me || 'all' }); // solo las fotos de esta cuenta
   } catch (e) {
     // Que al menos no quede guardada la sesión de una cuenta que ya no existe
     try { await store.del('sync:auth'); } catch (e2) { /* sin almacenamiento */ }

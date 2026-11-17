@@ -6,7 +6,7 @@ import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, ren
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
 import { exportPhotos, importPhotos } from './photos.js';
-import { syncConfigured, syncState } from './sync.js';
+import { currentUserId, syncConfigured, syncState } from './sync.js';
 import { accountCard } from './account.js';
 
 /* ---------- vista: Ajustes ---------- */
@@ -253,9 +253,9 @@ Object.assign(ACTIONS, {
       $('#import-file').click();
   },
   'wipe': async (el, top, act) => {
-      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, el sueño, los entrenamientos, el cardio, las medidas, las fotos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar. Si tienes la cuenta conectada, se cerrará la sesión aquí, pero los datos de tu cuenta no se borran.', ok: 'Borrar todo', danger: true,
+      pushSheet({ type: 'confirm', title: 'Borrar todos los datos', text: 'Se borrarán el diario, el peso, los pasos, el sueño, los entrenamientos, el cardio, las medidas, tus fotos, tus alimentos, recetas y rutinas de este teléfono. Si no tienes una copia, no se podrán recuperar. Si tienes la cuenta conectada, se cerrará la sesión aquí, pero los datos de tu cuenta no se borran.', ok: 'Borrar todo', danger: true,
         onOk: async () => {
-          await wipeAll();
+          await wipeAll({ photos: currentUserId() || 'all' }); // las fotos de otras cuentas de este teléfono no se tocan
           applyTheme();
           render();
           toast('Datos borrados');

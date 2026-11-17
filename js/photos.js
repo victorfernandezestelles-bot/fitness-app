@@ -4,7 +4,7 @@ import * as store from './store.js';
 import { $, addDays, dateLong, dateShort, deliverFile, esc, fmt, isDate, isImageData, parseISO, plain, plural, today, uid } from './util.js';
 import { S, SAVED } from './state.js';
 import { ACTIONS, CHANGES, SHEETS, popSheet, popTo, pushSheet, render, renderSheets, toast } from './ui.js';
-import { rpc } from './sync.js';
+import { SYNC_HOOKS, currentUserId, rpc } from './sync.js';
 import { accessState, errorText, myProfile } from './account.js';
 
 export const POSES = [['frente', 'Frente'], ['lado', 'Lado'], ['espalda', 'Espalda']];
@@ -14,10 +14,16 @@ let sets = null; // [{ id, date, poses: [...], thumbs: {pose: dataURL} }] ordena
 const imgCache = new Map();
 // Al borrar todos los datos (o la cuenta) no debe quedar ninguna foto en memoria
 SAVED.push((key) => { if (key === '!wipe') { sets = null; imgCache.clear(); } });
+SYNC_HOOKS.auth.push(() => { sets = null; imgCache.clear(); });
 
+// Solo las fotos de la cuenta con la sesión abierta (las sin dueño se adjudican al fijar el dueño, en sync.js)
 export async function loadPhotoSets(force = false) {
   if (sets && !force) return sets;
-  try { sets = (await store.photoSets()).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)); } catch (e) { sets = []; }
+  const me = currentUserId();
+  try {
+    const all = await store.photoSets();
+    sets = all.filter((x) => me && x.owner === me).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  } catch (e) { sets = []; }
   return sets;
 }
 async function photo(id, pose) {
@@ -179,7 +185,7 @@ function shareBox(s) {
 }
 
 async function saveSet(set) {
-  try { await store.photoPut('set:' + set.id, { id: set.id, date: set.date, poses: set.poses, thumbs: set.thumbs, at: set.at || null, shared: !!set.shared }); } catch (e) { /* sin almacén */ }
+  try { await store.photoPut('set:' + set.id, { id: set.id, owner: set.owner || currentUserId(), date: set.date, poses: set.poses, thumbs: set.thumbs, at: set.at || null, shared: !!set.shared }); } catch (e) { /* sin almacén */ }
 }
 
 // El servidor manda: si el vínculo terminó, ya no hay nada compartido
@@ -221,7 +227,7 @@ Object.assign(ACTIONS, {
     const poses = POSES.map(([p]) => p).filter((p) => top.picks[p] && top.picks[p] !== 'busy');
     if (!poses.length) { toast('Añade al menos una foto.'); return; }
     const id = uid();
-    const set = { id, date: top.date, poses, thumbs: Object.fromEntries(poses.map((p) => [p, top.picks[p].thumb])), at: new Date().toISOString() };
+    const set = { id, owner: currentUserId(), date: top.date, poses, thumbs: Object.fromEntries(poses.map((p) => [p, top.picks[p].thumb])), at: new Date().toISOString() };
     try {
       for (const p of poses) await store.photoPut(`img:${id}:${p}`, top.picks[p].full);
       await store.photoPut('set:' + id, set);
@@ -317,7 +323,7 @@ export function importPhotos() {
         if (!poses.length) continue;
         const thumbs = Object.fromEntries(poses.filter((p) => isImageData(x.thumbs?.[p])).map((p) => [p, x.thumbs[p]]));
         for (const p of poses) await store.photoPut(`img:${x.id}:${p}`, x.images[p]);
-        await store.photoPut('set:' + x.id, { id: x.id, date: x.date, poses, thumbs, at: typeof x.at === 'string' ? plain(x.at) : null });
+        await store.photoPut('set:' + x.id, { id: x.id, owner: currentUserId(), date: x.date, poses, thumbs, at: typeof x.at === 'string' ? plain(x.at) : null });
         n++;
       }
       await loadPhotoSets(true);

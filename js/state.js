@@ -227,10 +227,17 @@ export async function replaceAll(data) {
   SAVED.forEach((fn) => fn('*'));
 }
 
-export async function wipeAll() {
+// Borra los datos del teléfono. photos: 'all' (todas), 'keep' (ninguna) o el id de una cuenta (solo las suyas y las sin dueño)
+export async function wipeAll({ photos = 'all' } = {}) {
   dropPending();
   await store.clearAll();
-  try { await store.photoClear(); } catch (e) { /* sin fotos */ }
+  try {
+    if (photos === 'all') await store.photoClear();
+    else if (photos !== 'keep') {
+      const mine = (await store.photoSets()).filter((x) => !x.owner || x.owner === photos);
+      if (mine.length) await store.photoDel(mine.flatMap((x) => ['set:' + x.id, ...(x.poses || []).map((p) => 'img:' + x.id + ':' + p)]));
+    }
+  } catch (e) { /* sin fotos */ }
   await store.put('meta', { schema: SCHEMA, createdAt: new Date().toISOString() });
   applySnapshot(migrate({}, SCHEMA));
   SAVED.forEach((fn) => fn('!wipe'));

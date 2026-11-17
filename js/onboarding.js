@@ -5,6 +5,7 @@ import { S, saveSettings, saveWeights } from './state.js';
 import { ACTIVITY } from './derived.js';
 import { ACTIONS, SHEETS, closeSheets, pushSheet, render, renderSheets, selectChip } from './ui.js';
 import { addTemplate, templateAdded } from './training.js';
+import { hasSynced, isLoggedIn, whenSynced } from './sync.js';
 
 const STEPS = ['Tus objetivos', 'Tu cuerpo', 'Tus rutinas', 'Tus datos'];
 
@@ -128,6 +129,8 @@ Object.assign(ACTIONS, {
 // Se enseña una vez a quien empieza sin datos; quien ya tiene datos no la ve
 export function maybeOnboard() {
   if (S.settings.onboarded) return;
+  // Con la cuenta, primero hay que traer sus datos: si ya los tiene, no hace falta la bienvenida
+  if (isLoggedIn() && !hasSynced()) { whenSynced(maybeOnboard); return; }
   const hasData = ['days', 'weights', 'workouts', 'foods', 'recipes', 'routines'].some((k) => Object.keys(S[k] || {}).length);
   S.settings.onboarded = true;
   saveSettings();
