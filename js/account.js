@@ -2,7 +2,7 @@
 // vínculo con un entrenador, solicitud para ser entrenador, modo solo lectura y borrado de la cuenta.
 // Lo que decide quién puede qué está en el servidor (supabase/002 y 003); aquí solo se refleja.
 import * as store from './store.js';
-import { $, dateShort, esc } from './util.js';
+import { $, dateShort, esc, localDay } from './util.js';
 import { GUARD, S, SAVED, saveSettings, wipeAll } from './state.js';
 import { ACCESS, ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { maybeOnboard } from './onboarding.js';
@@ -207,7 +207,7 @@ const hasLocalData = () => ['days', 'weights', 'workouts', 'foods', 'recipes', '
 function requestLine() {
   const r = profile?.request;
   if (!r) return '';
-  if (r.status === 'pending') return `<p class="gate-note">Solicitud para ser entrenador enviada el ${dateShort(r.created_at.slice(0, 10))}: pendiente de revisar.</p>`;
+  if (r.status === 'pending') return `<p class="gate-note">Solicitud para ser entrenador enviada el ${dateShort(localDay(r.created_at))}: pendiente de revisar.</p>`;
   if (r.status === 'rejected') return `<p class="gate-note">Tu solicitud para ser entrenador no se ha aprobado${r.reply ? `: «${esc(r.reply)}»` : '.'}</p>`;
   return '';
 }
@@ -240,7 +240,7 @@ function lastLinkLine() {
 function linkRequestLine(cls) {
   const r = profile?.link_request;
   if (!r) return '';
-  return `<div class="${cls}"><p>Has enviado una solicitud a ${trainerName(r)} el ${dateShort(r.created_at.slice(0, 10))}. ${profile.link ? 'Cuando la acepte, cambiarás de entrenador.' : 'Podrás usar la app cuando la acepte.'}</p>
+  return `<div class="${cls}"><p>Has enviado una solicitud a ${trainerName(r)} el ${dateShort(localDay(r.created_at))}. ${profile.link ? 'Cuando la acepte, cambiarás de entrenador.' : 'Podrás usar la app cuando la acepte.'}</p>
     <button type="button" class="link" data-act="acct-link-cancel">Anular la solicitud</button></div>`;
 }
 
@@ -325,7 +325,7 @@ export function accountCard() {
       <button type="button" class="btn ghost" data-act="sync-now">Sincronizar ahora</button>
       <button type="button" class="btn ghost" data-act="sync-logout">Cerrar sesión</button>
     </div>
-    ${p?.request?.status === 'pending' ? `<p class="hint">Solicitud para ser entrenador enviada el ${dateShort(p.request.created_at.slice(0, 10))}: pendiente de revisar.</p>` : ''}
+    ${p?.request?.status === 'pending' ? `<p class="hint">Solicitud para ser entrenador enviada el ${dateShort(localDay(p.request.created_at))}: pendiente de revisar.</p>` : ''}
     ${p?.request?.status === 'rejected' && canAsk ? `<p class="hint">Tu última solicitud para ser entrenador no se aprobó${p.request.reply ? `: «${esc(p.request.reply)}»` : '.'}</p>` : ''}
     ${canAsk ? '<button type="button" class="btn ghost wide top-gap" data-act="acct-request">Soy entrenador: solicitar acceso</button>' : ''}
     <p class="hint">Se sincroniza todo menos las fotos y los ajustes de apariencia. Los datos se guardan en un servidor de la UE (Irlanda) y solo tu cuenta puede leerlos.</p>
@@ -337,10 +337,10 @@ function trainerSection(p) {
   const l = p.link;
   let html = '';
   if (l) {
-    html += `<p>Tu entrenador: ${trainerName(l)}${l.since ? ` · desde el ${dateShort(l.since.slice(0, 10))}` : ''}</p>`;
+    html += `<p>Tu entrenador: ${trainerName(l)}${l.since ? ` · desde el ${dateShort(localDay(l.since))}` : ''}</p>`;
     if (l.status === 'blocked') html += '<p class="hint">Ha pausado tu acceso como cliente.</p>';
     if (l.unlink_at) html += `<p class="hint warn-text">Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>.</p>`;
-    if (inbox?.proposal) html += `<div class="gate-wait"><p>Te ha propuesto nuevos objetivos el ${dateShort(inbox.proposal.created_at.slice(0, 10))}.</p><button type="button" class="link" data-act="acct-proposal">Ver la propuesta</button></div>`;
+    if (inbox?.proposal) html += `<div class="gate-wait"><p>Te ha propuesto nuevos objetivos el ${dateShort(localDay(inbox.proposal.created_at))}.</p><button type="button" class="link" data-act="acct-proposal">Ver la propuesta</button></div>`;
     const nn = inbox?.notes?.length || 0;
     if (nn) html += `<button type="button" class="btn ghost small" data-act="acct-notes">Notas de tu entrenador (${nn})${unreadNotes() ? ' · nuevas' : ''}</button>`;
     const nt = inbox?.templates?.length || 0;
@@ -366,7 +366,7 @@ SHEETS['coach-notes'] = {
     return `
       <p class="muted">Lo que ${esc(profile?.link?.trainer_name || 'tu entrenador')} ha querido compartir contigo.</p>
       ${list.length ? `<ul class="fc-notes top-gap">${list.map((n) => `<li><div class="fc-note static">
-        <span class="fc-note-top"><span class="muted">${dateShort(n.created_at.slice(0, 10))}${(n.updated_at || '').slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span></span>
+        <span class="fc-note-top"><span class="muted">${dateShort(localDay(n.created_at))}${(n.updated_at || '').slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span></span>
         <span class="fc-note-body">${esc(n.body)}</span>
       </div></li>`).join('')}</ul>` : '<p class="empty">No hay notas.</p>'}`;
   },
@@ -386,7 +386,7 @@ SHEETS['coach-proposal'] = {
     const gt = pr.goals_train;
     const canAnswer = accessState() === 'active';
     return `
-      <p><b>${esc(profile?.link?.trainer_name || 'Tu entrenador')}</b> te propone estos objetivos el ${dateShort(pr.created_at.slice(0, 10))}.</p>
+      <p><b>${esc(profile?.link?.trainer_name || 'Tu entrenador')}</b> te propone estos objetivos el ${dateShort(localDay(pr.created_at))}.</p>
       ${pr.message ? `<p class="req-msg top-gap">${esc(pr.message)}</p>` : ''}
       <div class="table-wrap"><table class="nut-table prop-table">
         <thead><tr><th></th><th>Ahora</th><th>Propuesta</th></tr></thead>
@@ -497,8 +497,18 @@ FORMS['acct-delete'] = async (form, top) => {
     renderSheets();
     return;
   }
-  await signOutLocal();
-  await wipeAll();
+  // La cuenta ya está borrada en el servidor: aunque falle algo al limpiar el teléfono, se sale de esta pantalla
+  try {
+    await signOutLocal();
+    await wipeAll();
+  } catch (e) {
+    // Que al menos no quede guardada la sesión de una cuenta que ya no existe
+    try { await store.del('sync:auth'); } catch (e2) { /* sin almacenamiento */ }
+    closeSheets();
+    render();
+    toast('Cuenta borrada. No se han podido borrar todos los datos de este teléfono: ciérrala y vuelve a abrirla, o bórralos en Ajustes › Tus datos.');
+    return;
+  }
   closeSheets();
   applyTheme();
   render();

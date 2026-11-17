@@ -1,6 +1,6 @@
 import { BASICS, BASICS_BY_ID, mult, scale, sumNut } from './nutrients.js';
 import { EXERCISES, EXERCISES_BY_ID, GRIP_FACTOR, MUSCLES, MUSCLE_NAME, defaultCfg, e1rm } from './exercises.js';
-import { $, addDays, fmt, norm, parseISO, today } from './util.js';
+import { $, addDays, fmt, localDay, norm, parseISO, today } from './util.js';
 import { S } from './state.js';
 
 /* ---------- datos derivados ---------- */
@@ -110,7 +110,7 @@ export function defaultQty(it) {
 }
 
 /* ---------- calendario de cumplimiento ---------- */
-export const dayKcal = (date) => dayOf(date).entries.reduce((a, e) => a + (e.n.kcal || 0), 0);
+export const dayKcal = (date) => dayOf(date).entries.reduce((a, e) => a + (Number(e.n?.kcal) || 0), 0);
 // Día entrenado de verdad: un entrenamiento de fuerza con algo apuntado o una actividad
 export function trainedOn(date) {
   if (Object.values(S.workouts).some((w) => w.date === date && w.exercises.length)) return true;
@@ -169,7 +169,7 @@ export function needsBackup() {
     const first = Object.keys(S.days).concat(Object.keys(S.weights)).sort()[0];
     return first && first <= addDays(today(), -7);
   }
-  return last.slice(0, 10) <= addDays(today(), -8);
+  return localDay(last) <= addDays(today(), -8);
 }
 
 /* ---------- vista: Progreso ---------- */
@@ -229,8 +229,10 @@ export function gripOf(exId, ex) {
 }
 
 // Suma al recuento por músculo las series de un ejercicio
+const KNOWN_MUSCLE = new Set(MUSCLES.map((m) => m.k));
 function addLoad(vol, ex, exId, load, byMuscle, name) {
   const add = (m, v) => {
+    if (!KNOWN_MUSCLE.has(m)) return; // músculo que esta versión no conoce: no cuenta
     vol[m] = (vol[m] || 0) + v;
     if (byMuscle) byMuscle[m][name] = (byMuscle[m][name] || 0) + v;
   };
@@ -283,8 +285,8 @@ export function workoutStats(w) {
 // En pantalla solo se suma al directo si se activa «Añadir tonelaje indirecto».
 function addTonnage(ton, tonInd, ex, exId, kg) {
   if (!kg) return;
-  for (const m of ex.primary) ton[m] = (ton[m] || 0) + kg;
-  if (tonInd) for (const m of [...ex.secondary, ...gripOf(exId, ex)]) tonInd[m] = (tonInd[m] || 0) + kg;
+  for (const m of ex.primary) if (KNOWN_MUSCLE.has(m)) ton[m] = (ton[m] || 0) + kg;
+  if (tonInd) for (const m of [...ex.secondary, ...gripOf(exId, ex)]) if (KNOWN_MUSCLE.has(m)) tonInd[m] = (tonInd[m] || 0) + kg;
 }
 
 export const weekVolume = (monday) => periodVolume(monday, addDays(monday, 6));
@@ -455,7 +457,7 @@ export function dataEnergy() {
   for (let i = 0; i < 28; i++) {
     const day = S.days[addDays(start, i)];
     if (!day || !day.entries.length) continue;
-    const k = day.entries.reduce((a, e) => a + (e.n.kcal || 0), 0);
+    const k = day.entries.reduce((a, e) => a + (Number(e.n?.kcal) || 0), 0);
     if (k >= 800) intake.push(k); // días con menos se consideran a medio apuntar
   }
   const t0 = parseISO(start).getTime();
@@ -499,7 +501,7 @@ export function weekReport(monday) {
   const wPrev = weekWeight(addDays(monday, -7));
   const logged = dates.filter((d) => dayOf(d).entries.length);
   const kcals = logged.map(dayKcal);
-  const prot = logged.map((d) => dayOf(d).entries.reduce((a, e) => a + (e.n.p || 0), 0));
+  const prot = logged.map((d) => dayOf(d).entries.reduce((a, e) => a + (Number(e.n?.p) || 0), 0));
   const goalK = logged.map((d) => goalsFor(d).kcal).filter((x) => x != null);
   const stepDays = dates.filter((d) => dayOf(d).steps != null);
   const stepGoal = S.settings.goals.steps;

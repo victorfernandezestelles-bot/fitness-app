@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.22.0';
+export const APP_VERSION = '0.22.1';
 
 /* ---------- utilidades ---------- */
 
@@ -33,6 +33,12 @@ export const fmt = (n, d = 0) => (n == null || Number.isNaN(n) ? '–' : Number(
 export const inputVal = (n, d = 2) => (n == null ? '' : String(Math.round(n * 10 ** d) / 10 ** d).replace('.', ','));
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 export const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Día local (AAAA-MM-DD) de una marca de tiempo del servidor, que viene en UTC: cortarla a 10 caracteres daría el día anterior de madrugada
+export const localDay = (ts) => {
+  if (isDate(ts)) return ts; // ya es un día
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? String(ts || '').slice(0, 10) : iso(d);
+};
 export const today = () => iso(new Date());
 export const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 export const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return iso(d); };

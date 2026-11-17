@@ -1,6 +1,6 @@
 // Pestaña Administración (solo cuentas de desarrollador): usuarios, códigos de activación y solicitudes.
 // Todo pasa por funciones del servidor que comprueban que quien llama es desarrollador.
-import { $, dateShort, esc, fmt, iso, norm, num, plural } from './util.js';
+import { $, dateShort, esc, fmt, iso, localDay, norm, num, plural } from './util.js';
 import { S } from './state.js';
 import { ACTIONS, FORMS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
@@ -30,7 +30,7 @@ async function load(what, force = false) {
 }
 
 const tabOf = () => S.ui.atab || 'users';
-const when = (iso) => (iso ? `${dateShort(iso.slice(0, 10))}` : '–');
+const when = (iso) => (iso ? `${dateShort(localDay(iso))}` : '–');
 const userLabel = (u) => esc(u.name || u.email || 'Sin nombre');
 const matches = (u, f) => (f === 'all' ? true : f === 'blocked' ? u.blocked : u.role === f && !u.blocked);
 

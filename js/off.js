@@ -45,9 +45,9 @@ function mapProduct(p) {
   const hasNutrition = per100.kcal != null || per100.p != null;
   const serving = Number(p.serving_quantity);
   return {
-    name: (p.product_name_es || p.product_name || p.generic_name_es || '').trim(),
-    brand: (p.brands || '').split(',')[0].trim(),
-    barcode: p.code || '',
+    name: String(p.product_name_es || p.product_name || p.generic_name_es || '').trim(),
+    brand: String(p.brands || '').split(',')[0].trim(),
+    barcode: String(p.code || ''),
     servingG: Number.isFinite(serving) && serving > 0 ? Math.round(serving) : null,
     per100,
     hasNutrition,

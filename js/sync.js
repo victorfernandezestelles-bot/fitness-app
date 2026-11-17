@@ -5,7 +5,7 @@
 // ahí se juntan las comidas de los dos.
 import * as store from './store.js';
 import { SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { $, cleanData, esc, plain } from './util.js';
+import { $, cleanData, esc, isDate, plain } from './util.js';
 import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout } from './state.js';
 import { ACTIONS, FORMS, HOOKS, SHEETS, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { keepAwake } from './training.js';
@@ -87,6 +87,18 @@ export function dataFromRows(list) {
     else { const [c, id] = splitKey(r.key); if (d[c]) d[c][id] = value; }
   }
   d.settings = mergeSettings(d.settings);
+  // Lo que no tiene una forma válida se descarta, para que la ficha no se rompa
+  for (const [k, w] of Object.entries(d.workouts)) {
+    if (!w || !isDate(w.date) || !Array.isArray(w.exercises)) { delete d.workouts[k]; continue; }
+    w.exercises = w.exercises.filter((we) => we && typeof we.exId === 'string' && Array.isArray(we.sets));
+    for (const we of w.exercises) we.sets = we.sets.filter((st) => st && typeof st === 'object');
+  }
+  for (const [k, a] of Object.entries(d.activities)) if (!a || !isDate(a.date)) delete d.activities[k];
+  for (const [k, day] of Object.entries(d.days)) {
+    if (!isDate(k) || !day || typeof day !== 'object' || Array.isArray(day)) { delete d.days[k]; continue; }
+    day.entries = (Array.isArray(day.entries) ? day.entries : []).filter((e) => e && typeof e === 'object').map((e) => ({ ...e, n: e.n && typeof e.n === 'object' ? e.n : {} }));
+  }
+  for (const k of ['weights', 'measures']) for (const key of Object.keys(d[k])) if (!isDate(key)) delete d[k][key];
   return d;
 }
 

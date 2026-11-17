@@ -1,7 +1,7 @@
 // Pestaña Clientes (entrenadores y desarrolladores): su código, las solicitudes y la lista de clientes
 // con pausar, reanudar y desvincular. También la ve quien dejó de ser entrenador mientras le quedan clientes,
 // con el aviso del plazo y la solicitud para ampliarlo. Las reglas están en supabase/003-entrenadores.sql.
-import { $, dateShort, esc, iso, norm, plural, today } from './util.js';
+import { $, dateShort, esc, iso, localDay, norm, plural, today } from './util.js';
 import { S, SAVED } from './state.js';
 import { ACTIONS, INPUTS, SHEETS, VIEWS, closeSheets, pushSheet, render, renderSheets, toast } from './ui.js';
 import { SYNC_HOOKS, rpc } from './sync.js';
@@ -30,7 +30,7 @@ async function load(force = false) {
 }
 
 const find = (id) => (data.list || []).find((c) => c.link_id === Number(id));
-const when = (iso) => (iso ? dateShort(iso.slice(0, 10)) : '–');
+const when = (iso) => (iso ? dateShort(localDay(iso)) : '–');
 const label = (c) => esc(c.name || c.email || 'Sin nombre');
 const isTrainer = () => ['trainer', 'dev'].includes(myProfile()?.role);
 const FILTERS = [['active', 'Activos'], ['blocked', 'Pausados'], ['banned', 'Solicitudes bloqueadas']];
@@ -220,6 +220,7 @@ Object.assign(ACTIONS, {
   'cl-manage': () => { const c = find(S.ui.client); if (c) pushSheet({ type: 'client', c }); },
   'cl-accept': async (el) => {
     const c = find(el.dataset.id);
+    if (!c) return;
     await act(() => rpc('trainer_respond', { p_link: c.link_id, p_action: 'accept' }), `${c.name || c.email} ya es tu cliente`);
     render();
   },

@@ -431,11 +431,23 @@ export function saveMeasure(s) {
     if (v != null) vals[m.k] = v;
   }
   if (!Object.keys(vals).length) { toast('Rellena al menos una medida.'); return; }
-  if (s.date !== date && !s.isNew) delete S.measures[s.date];
-  S.measures[date] = { ...(s.isNew ? S.measures[date] || {} : {}), ...vals };
-  saveMeasures();
+  // Si al editar se cambia a un día que ya tiene medición, se unen (con «Deshacer») en vez de pisarla
+  const moved = !s.isNew && s.date !== date;
+  const clash = moved && S.measures[date];
+  const before = { [s.date]: S.measures[s.date], [date]: S.measures[date] };
   closeSheets();
-  toast('Medición guardada');
+  undoable(clash ? `Medición unida a la del ${dateShort(date)}` : 'Medición guardada',
+    () => {
+      if (moved) delete S.measures[s.date];
+      S.measures[date] = { ...(s.isNew || clash ? S.measures[date] || {} : {}), ...vals };
+      saveMeasures();
+      render();
+    },
+    () => {
+      for (const [k, v] of Object.entries(before)) { if (v) S.measures[k] = v; else delete S.measures[k]; }
+      saveMeasures();
+      render();
+    });
 }
 
 /* ---------- acciones ---------- */
@@ -453,7 +465,11 @@ Object.assign(ACTIONS, {
         () => { S.weights[d] = old; saveWeights(); render(); });
   },
   'use-target': async (el, top, act) => {
-      S.settings.goals.kcal = Number(el.dataset.kcal); saveSettings(); render(); toast(`Objetivo: ${fmt(Number(el.dataset.kcal))} kcal`);
+      const old = S.settings.goals.kcal;
+      const v = Number(el.dataset.kcal);
+      undoable(`Objetivo: ${fmt(v)} kcal`,
+        () => { S.settings.goals.kcal = v; saveSettings(); render(); },
+        () => { S.settings.goals.kcal = old; saveSettings(); render(); });
   },
   'measure-new': async (el, top, act) => {
       pushSheet({ type: 'measure', date: today(), isNew: true });

@@ -1,5 +1,5 @@
 import { MACROS, MICROS, sumNut } from './nutrients.js';
-import { $, APP_VERSION, csvNum, csvText, dateLong, deliverFile, fmt, inputVal, num, plural, restLabel, today } from './util.js';
+import { $, APP_VERSION, csvNum, csvText, dateLong, deliverFile, fmt, inputVal, localDay, num, plural, restLabel, today } from './util.js';
 import { MEAL_NAME, S, SCHEMA, flushAll, replaceAll, saveSettings, snapshot, wipeAll } from './state.js';
 import { ACTIVITY, dayOf, parseUnit, pluralEs } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, toast } from './ui.js';
@@ -108,7 +108,7 @@ export function viewAjustes() {
   <section class="card" id="aj-datos">
     <div class="card-head"><h2>Tus datos</h2></div>
     <p class="muted">En este teléfono hay ${plural(nDays, 'día', 'días')} de diario, ${plural(nWk, 'entrenamiento', 'entrenamientos')}, ${plural(Object.keys(S.activities).length, 'actividad', 'actividades')}, ${plural(nFoods, 'alimento propio', 'alimentos propios')} y ${plural(nRec, 'receta', 'recetas')}.
-      ${last ? `Última copia: ${dateLong(last.slice(0, 10))}.` : 'Aún no has guardado ninguna copia.'}</p>
+      ${last ? `Última copia: ${dateLong(localDay(last))}.` : 'Aún no has guardado ninguna copia.'}</p>
     <div class="stack">
       <button type="button" class="btn" data-act="export-json">Guardar copia completa (.json)</button>
       <button type="button" class="btn ghost" data-act="export-csv-diario">Exportar comidas para Excel (.csv)</button>
@@ -184,7 +184,7 @@ export async function importFile(file) {
   pushSheet({
     type: 'confirm',
     title: 'Restaurar copia',
-    text: `La copia es del ${data.exportedAt ? dateLong(data.exportedAt.slice(0, 10)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}. Sustituirá todos los datos que hay ahora en este teléfono${syncState.status !== 'off' ? ' y, como tienes la cuenta conectada, también en tus otros dispositivos' : ''}.`,
+    text: `La copia es del ${data.exportedAt ? dateLong(localDay(data.exportedAt)) : 'día desconocido'} y tiene ${plural(nDays, 'día', 'días')} de diario y ${plural(nWk, 'entrenamiento', 'entrenamientos')}. Sustituirá todos los datos que hay ahora en este teléfono${syncState.status !== 'off' ? ' y, como tienes la cuenta conectada, también en tus otros dispositivos' : ''}.`,
     ok: 'Restaurar',
     danger: true,
     onOk: async () => {

@@ -2,7 +2,7 @@
 // y comparte con sus clientes. El cliente puede guardar la receta en las suyas o apuntar el plan en su diario.
 // Cada plantilla lleva dentro los alimentos propios que usa, para que el cliente los tenga aunque no existan en su app.
 import { BASICS_BY_ID, mult, scale, sumNut } from './nutrients.js';
-import { $, cleanData, dateShort, esc, fmt, inputVal, num, plural, today, uid } from './util.js';
+import { $, cleanData, dateShort, esc, fmt, inputVal, localDay, num, plural, today, uid } from './util.js';
 import { GUARD, MEALS, MEAL_NAME, S, saveDay, saveFoods, saveRecipes } from './state.js';
 import { ensureDay, recipeTotals } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
@@ -63,7 +63,7 @@ const data = { list: null, error: '' };
 let loading = false;
 let clients = []; // los clientes del entrenador (los pone clients.js al cargar la lista)
 export function setTemplateClients(list) { clients = (list || []).filter((c) => c.status === 'active' || c.status === 'blocked'); }
-export function resetTemplates() { data.list = null; data.error = ''; clientTpls = null; }
+export function resetTemplates() { data.list = null; data.error = ''; clientTpls = null; clientTplsError = ''; }
 
 async function load(force = false) {
   if (loading || (!force && (data.list || data.error))) return;
@@ -159,7 +159,7 @@ SHEETS.tpl = {
     if (!s.sel) s.sel = new Set(t.shared_with);
     const src = t.kind === 'recipe' ? S.recipes[t.payload.srcId] : null;
     return `
-      <p class="sheet-sub"><em class="tag">${KIND[t.kind]}</em> · actualizada el ${dateShort(t.updated_at.slice(0, 10))}</p>
+      <p class="sheet-sub"><em class="tag">${KIND[t.kind]}</em> · actualizada el ${dateShort(localDay(t.updated_at))}</p>
       ${t.kind === 'plan' ? planHTML(t.payload) : recipeHTML(t.payload)}
       <h3 class="list-title">Compartir con</h3>
       ${clients.length ? `<div class="tpl-share">
@@ -178,9 +178,11 @@ SHEETS.tpl = {
 /* ---------- cliente ---------- */
 
 let clientTpls = null; // contenido de las plantillas compartidas conmigo
+let clientTplsError = '';
 
 async function loadClientTpls() {
-  try { clientTpls = cleanData(await rpc('client_templates')); } catch (e) { toast(errorText(e)); }
+  clientTplsError = '';
+  try { clientTpls = cleanData(await rpc('client_templates')); } catch (e) { clientTplsError = errorText(e); }
 }
 
 export function tplNew() {
@@ -195,13 +197,15 @@ SHEETS['coach-tpls'] = {
     if (!list.length) return '<p class="empty">Tu entrenador aún no ha compartido ninguna plantilla contigo.</p>';
     return `<ul class="list">${list.map((t) => `<li><button type="button" class="row" data-act="acct-tpl-open" data-id="${t.id}">
       <span class="row-main">${esc(t.name)} <em class="tag">${KIND[t.kind]}</em></span>
-      <span class="row-sub">${dateShort(t.at.slice(0, 10))}</span></button></li>`).join('')}</ul>`;
+      <span class="row-sub">${dateShort(localDay(t.at))}</span></button></li>`).join('')}</ul>`;
   },
 };
 
 SHEETS['coach-tpl'] = {
   title: (s) => (clientTpls || []).find((t) => t.id === s.id)?.name || 'Plantilla',
   render: (s) => {
+    if (!clientTpls && clientTplsError) return `<p class="empty">No se ha podido cargar la plantilla: ${esc(clientTplsError)}</p>
+      <button type="button" class="btn wide" data-act="acct-tpl-retry">Reintentar</button>`;
     if (!clientTpls) return '<p class="muted">Cargando…</p>';
     const t = clientTpls.find((x) => x.id === s.id);
     if (!t) return '<p class="empty">Esta plantilla ya no está disponible.</p>';
@@ -314,6 +318,7 @@ Object.assign(ACTIONS, {
     await loadClientTpls();
     renderSheets();
   },
+  'acct-tpl-retry': async () => { clientTplsError = ''; renderSheets(); await loadClientTpls(); renderSheets(); },
   'acct-tpl-save': (el, top) => {
     const t = (clientTpls || []).find((x) => x.id === top.id);
     if (!t || !GUARD.canWrite()) return;
@@ -336,7 +341,7 @@ Object.assign(ACTIONS, {
     for (const it of t.payload.items || []) {
       const f = foodIn(t.payload, it.foodId);
       if (!f || !(it.g > 0)) continue;
-      day.entries.push({ id: uid(), meal: MEAL_NAME[it.meal] ? it.meal : 'otros', type: 'food', ref: it.foodId, name: f.name, qty: Number(it.g), unit: 'g', n: scale(f.per100, Number(it.g)) });
+      day.entries.push({ id: uid(), meal: Object.hasOwn(MEAL_NAME, it.meal) ? it.meal : 'otros', type: 'food', ref: it.foodId, name: f.name, qty: Number(it.g), unit: 'g', n: scale(f.per100, Number(it.g)) });
       n++;
     }
     saveDay(date);

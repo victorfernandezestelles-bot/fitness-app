@@ -511,9 +511,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  /* Sin desenfoque: en Safari de iOS 16, el desenfoque sobre una capa que se repinta puede dejar zonas en negro */
   border-top: 1px solid var(--line);
   padding: 4px max(8px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-left, 0px));
 }
@@ -723,7 +721,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px 
 .sub-h { font-family: var(--font-display); font-size: var(--step-0); font-weight: 700; }
 textarea { width: 100%; font: inherit; font-size: max(16px, 1rem); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.chips.scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.chips.scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
 .chips.scroll .chip { flex: none; }
 .row.static.hist { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 2px; }
 .row.static.hist .row-side { grid-row: 1 / span 2; grid-column: 2; }
@@ -928,7 +926,7 @@ figcaption { font-size: var(--step--1); color: var(--muted); text-align: center;
 .ph-slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ph-slot input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; }
 .ph-plus { font-size: 2rem; color: var(--accent); font-weight: 700; }
-.ph-pose { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px; text-align: center; font-size: var(--step--1); font-weight: 700; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--ink); }
+.ph-pose { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px; text-align: center; font-size: var(--step--1); font-weight: 700; background: var(--surface); background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--ink); }
 .ph-item { grid-template-columns: minmax(0, 1fr) auto; }
 .ph-mini { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; }
 .ph-mini img { width: 34px; height: 45px; object-fit: cover; border-radius: 6px; }

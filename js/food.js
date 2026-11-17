@@ -1151,6 +1151,9 @@ Object.assign(CHANGES, {
   'copy-from': (el, top) => { if (top && el.value) { top.from = el.value; renderSheets(); } },
   steps: (el) => {
     const v = num(el.value);
+    // Un texto que no es un número no borra lo apuntado
+    if (v == null && el.value.trim()) { toast('Escribe los pasos con números.'); el.value = inputVal(dayOf(S.ui.date).steps); return; }
+    if (v != null && (v < 0 || v > 200000)) { toast('Pon los pasos, de 0 a 200.000.'); el.value = inputVal(dayOf(S.ui.date).steps); return; }
     const day = ensureDay(S.ui.date);
     day.steps = v == null ? null : Math.round(v);
     saveDay(S.ui.date);
@@ -1158,7 +1161,7 @@ Object.assign(CHANGES, {
   },
   sleep: (el) => {
     let v = num(el.value);
-    if (v != null && (v < 0 || v > 24)) { toast('Pon las horas dormidas, de 0 a 24.'); return; }
+    if (v != null && (v < 0 || v > 24)) { toast('Pon las horas dormidas, de 0 a 24.'); el.value = inputVal(dayOf(S.ui.date).sleep, 2); return; }
     if (v != null) v = Math.round(v * 4) / 4;
     const day = ensureDay(S.ui.date);
     day.sleep = v;
@@ -1177,8 +1180,10 @@ Object.assign(CHANGES, {
 });
 
 FORMS['manual-code'] = (form, top) => {
-  const code = $('#code-in').value.replace(/\D/g, '');
-  if (code.length < 8) { toast('El código tiene 8 o 13 cifras.'); return; }
+  let code = $('#code-in').value.replace(/\D/g, '');
+  // Un código de 12 cifras (UPC) se guarda con un 0 delante, como hace el escáner
+  if (code.length === 12) code = '0' + code;
+  if (code.length < 8 || code.length > 14) { toast('El código tiene entre 8 y 14 cifras (lo normal, 8 o 13).'); return; }
   stopScanner();
   handleCode(code, top);
 };

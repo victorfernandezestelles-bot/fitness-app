@@ -19,9 +19,11 @@ export const ACCESS = {
     'day-prev', 'day-next', 'day-today', 'calendar', 'cal-month', 'cal-day', 'cal-today', 'edit-entry', 'lib',
     'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m', 'volh-metric', 'ton-ind',
     'week-prev', 'week-next', 'wtab', 'wview', 'wk-ex-toggle', 'act-open', 'range', 'report-open', 'rep-preset', 'rep-range', 'rep-foods', 'rep-share', 'rep-print', 'rep-file',
-    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
+    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'open-recipe', 'open-food', 'measure-open', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
     'export-json', 'export-csv-diario', 'export-csv-resumen', 'export-csv-entrenos', 'export-csv-actividades', 'export-photos']),
   inputs: new Set(['libq', 'pickq', 'ex-q', 'admin-q']),
+  // Cambios que solo eligen qué ver (no guardan nada)
+  changes: new Set(['ph-which']),
   forms: new Set(['sync-login', 'acct-code', 'acct-delete']),
 };
 const allowed = (kind, name) => !ACCESS.readOnly || String(name).startsWith('sync-') || String(name).startsWith('acct-') || ACCESS[kind].has(name);
@@ -47,6 +49,15 @@ export function undoable(text, apply, revert) {
   toast(text, { undo: revert });
 }
 
+// Mientras una acción que tarda (servidor, fotos) no termina, otro toque en el mismo botón no hace nada:
+// así un doble toque no guarda dos veces
+const running = new Set();
+async function runOnce(key, fn) {
+  if (running.has(key)) { toast('Un momento…'); return; }
+  running.add(key);
+  try { await fn(); } finally { running.delete(key); }
+}
+
 /* ---------- navegación ---------- */
 
 export function setTab(tab) {
@@ -58,8 +69,15 @@ export function setTab(tab) {
 export function render() {
   document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === S.ui.tab ? 'page' : 'false'));
   const v = VIEWS[S.ui.tab] || VIEWS.hoy;
-  $('#view').innerHTML = v.html();
-  v.after?.();
+  try {
+    $('#view').innerHTML = v.html();
+  } catch (e) {
+    console.error(e);
+    $('#view').innerHTML = `<p class="empty">Algo ha fallado al mostrar esta pantalla. Prueba en otra pestaña o cierra y abre la app; si se repite, avísanos.</p>`;
+    return;
+  }
+  // Si falla una gráfica, el resto de la pantalla se queda
+  try { v.after?.(); } catch (e) { console.error(e); }
 }
 
 export function chartTooltip(host) {
@@ -125,21 +143,25 @@ export function renderSheets() {
   const wasOpen = !root.hidden;
   renderedSheet = top;
   const back = S.sheets.length > 1;
+  // Si una hoja falla al pintarse, se ve un aviso y se puede cerrar, en vez de quedarse colgada
+  const safe = (fn, fallback) => { try { return fn(); } catch (e) { console.error(e); return fallback; } };
+  const title = safe(() => def.title(top), '');
+  const content = safe(() => def.render(top), '<p class="empty">Algo ha fallado al mostrar esto. Cierra y vuelve a abrirlo; si se repite, avísanos.</p>');
   root.innerHTML = `
     <div class="backdrop${wasOpen ? ' still' : ''}" data-act="sheet-close"></div>
     <div class="sheet${wasOpen ? ' still' : ''}" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-head">
         <button type="button" class="icon-btn" data-act="${back ? 'sheet-back' : 'sheet-close'}" aria-label="${back ? 'Atrás' : 'Cerrar'}">${back ? '‹' : '×'}</button>
-        <h2 id="sheet-title">${esc(def.title(top))}</h2>
+        <h2 id="sheet-title">${esc(title)}</h2>
         <span class="sheet-head-pad"></span>
       </div>
-      <div class="sheet-body">${def.render(top)}</div>
+      <div class="sheet-body">${content}</div>
     </div>`;
   root.hidden = false;
   document.body.classList.add('sheet-open');
   const body = root.querySelector('.sheet-body');
   if (body && (same || top._scroll)) body.scrollTop = top._scroll || 0;
-  def.mount?.(top, root);
+  safe(() => def.mount?.(top, root));
 }
 
 /* Confirmación dentro de la app (solo para lo que no se puede deshacer) */
@@ -185,7 +207,9 @@ export function initEvents() {
     if (!el) return;
     const fn = ACTIONS[el.dataset.act];
     if (fn && !allowed('acts', el.dataset.act)) { readOnlyToast(); return; }
-    if (fn) await fn(el, topSheet(), el.dataset.act, ev);
+    // confirm-ok ya cierra su hoja al primer toque; el resto, por acción y elemento (un cliente, una serie…)
+    if (fn && el.dataset.act === 'confirm-ok') await fn(el, topSheet(), el.dataset.act, ev);
+    else if (fn) await runOnce(`a:${el.dataset.act}:${el.dataset.id ?? el.dataset.i ?? ''}:${el.dataset.j ?? ''}`, () => fn(el, topSheet(), el.dataset.act, ev));
   });
   document.addEventListener('input', (ev) => {
     const fn = INPUTS[ev.target.dataset.input];
@@ -195,14 +219,14 @@ export function initEvents() {
   document.addEventListener('change', (ev) => {
     const el = ev.target;
     const fn = CHANGES[el.dataset.change] || CHANGES['#' + el.id];
-    if (fn && ACCESS.readOnly && !String(el.dataset.change || '').startsWith('acct-')) { readOnlyToast(); return; }
+    if (fn && ACCESS.readOnly && !String(el.dataset.change || '').startsWith('acct-') && !ACCESS.changes.has(el.dataset.change)) { readOnlyToast(); return; }
     if (fn) fn(el, topSheet());
   });
   document.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const fn = FORMS[ev.target.dataset.form];
     if (fn && !allowed('forms', ev.target.dataset.form)) { readOnlyToast(); return; }
-    if (fn) fn(ev.target, topSheet());
+    if (fn) runOnce('f:' + ev.target.dataset.form, () => fn(ev.target, topSheet()));
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && ev.target.matches('[data-change]')) ev.target.blur();

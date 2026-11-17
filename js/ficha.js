@@ -4,7 +4,7 @@
 // Para pintar se reutilizan los cálculos de la app: mientras se genera el HTML, S apunta un momento
 // a los datos del cliente y vuelve a los propios al terminar (es síncrono: nada se guarda ni se sincroniza entremedias).
 import { bodyPair } from './bodymap.js';
-import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, num, parseISO, plural, today } from './util.js';
+import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, localDay, num, parseISO, plural, today } from './util.js';
 import { MEALS, S } from './state.js';
 import { MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
@@ -296,9 +296,9 @@ function notasTab(f) {
   const g = S.settings.goals;
   const notes = f.notes || [];
   const propLine = !last ? '' : last.status === 'pending'
-    ? `<div class="gate-wait"><p>Propuesta enviada el ${dateShort(last.created_at.slice(0, 10))}: pendiente de que la acepte.</p><p class="muted">${goalsText(last.goals) || '–'}</p>${canWriteCoach() ? '<button type="button" class="link" data-act="fc-prop-cancel">Anular la propuesta</button>' : ''}</div>`
-    : last.status === 'accepted' ? `<p class="hint">Aceptó tu propuesta del ${dateShort(last.created_at.slice(0, 10))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>`
-    : last.status === 'rejected' ? `<p class="hint warn-text">Rechazó tu propuesta del ${dateShort(last.created_at.slice(0, 10))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>` : '';
+    ? `<div class="gate-wait"><p>Propuesta enviada el ${dateShort(localDay(last.created_at))}: pendiente de que la acepte.</p><p class="muted">${goalsText(last.goals) || '–'}</p>${canWriteCoach() ? '<button type="button" class="link" data-act="fc-prop-cancel">Anular la propuesta</button>' : ''}</div>`
+    : last.status === 'accepted' ? `<p class="hint">Aceptó tu propuesta del ${dateShort(localDay(last.created_at))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>`
+    : last.status === 'rejected' ? `<p class="hint warn-text">Rechazó tu propuesta del ${dateShort(localDay(last.created_at))}${last.reply ? `: «${esc(last.reply)}»` : '.'}</p>` : '';
   return `
     <section class="card">
       <div class="card-head"><h2>Objetivos</h2></div>
@@ -309,7 +309,7 @@ function notasTab(f) {
     <section class="card">
       <div class="card-head"><h2>Notas</h2>${canWriteCoach() ? '<button type="button" class="btn small" data-act="fc-note" data-id="">+ Nueva</button>' : ''}</div>
       ${f.notes == null ? '<p class="muted">No se han podido cargar las notas.</p>' : notes.length ? `<ul class="fc-notes">${notes.map((n) => `<li><button type="button" class="fc-note" data-act="fc-note" data-id="${n.id}" ${canWriteCoach() ? '' : 'disabled'}>
-          <span class="fc-note-top"><span class="muted">${dateShort(n.created_at.slice(0, 10))}${n.updated_at.slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span><em class="tag ${n.visible ? '' : 'tag-off'}">${n.visible ? 'Visible para el cliente' : 'Privada'}</em></span>
+          <span class="fc-note-top"><span class="muted">${dateShort(localDay(n.created_at))}${n.updated_at.slice(0, 16) !== n.created_at.slice(0, 16) ? ' · editada' : ''}</span><em class="tag ${n.visible ? '' : 'tag-off'}">${n.visible ? 'Visible para el cliente' : 'Privada'}</em></span>
           <span class="fc-note-body">${esc(n.body)}</span>
         </button></li>`).join('')}</ul>` : '<p class="muted">Aún no has escrito ninguna nota. Las privadas solo las ves tú; las visibles le aparecen al cliente en su app.</p>'}
     </section>`;

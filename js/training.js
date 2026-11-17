@@ -1,7 +1,7 @@
 import { EXERCISES_BY_ID, MUSCLES, MUSCLE_NAME, e1rm } from './exercises.js';
 import { TEMPLATES } from './templates.js';
 import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
-import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, restLabel, today, uid } from './util.js';
+import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverFile, durLabel, esc, fmt, inputVal, niceStep, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
 import { SEG_LABEL, allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
@@ -417,13 +417,17 @@ export function fillExList(s) {
 }
 
 // Añade las rutinas de una plantilla (sin duplicar las que ya estén)
+// Añade las rutinas de la plantilla que falten y dice cuántas ha añadido
 export function addTemplate(t) {
+  let n = 0;
   for (const r of t.routines) {
     if (Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq)) continue;
     const id = uid();
     S.routines[id] = { id, name: r.name, group: t.id, seq: r.seq, items: structuredClone(r.items) };
+    n++;
   }
   saveRoutines();
+  return n;
 }
 export const templateAdded = (t) => t.routines.every((r) => Object.values(S.routines).some((x) => x.group === t.id && x.seq === r.seq));
 
@@ -584,7 +588,7 @@ SHEETS.routines = {
   render: () => {
     const list = Object.values(S.routines).sort((a, b) => (a.group || '').localeCompare(b.group || '') || (a.seq ?? 0) - (b.seq ?? 0) || a.name.localeCompare(b.name, 'es'));
     const tpls = TEMPLATES.map((t) => {
-      const added = Object.values(S.routines).some((r) => r.group === t.id);
+      const added = templateAdded(t);
       return `<div class="tpl">
         <div><b>${esc(t.name)}</b><p class="muted small-text">${esc(t.description)}</p></div>
         ${added ? '<span class="tag">añadida</span>' : `<button type="button" class="btn small" data-act="tpl-add" data-id="${t.id}">Añadir</button>`}
@@ -874,9 +878,23 @@ Object.assign(ACTIONS, {
       const i = fromMenu ? top.i : Number(el.dataset.i);
       if (fromMenu) popTo(top.parent);
       const old = w.exercises[i];
+      const sheet = fromMenu ? top.parent : top;
+      const oldOpen = sheet?.open ? { ...sheet.open } : null;
+      const ssBefore = w.exercises.map((x) => x.ss);
+      // Los ejercicios de después bajan un puesto: su estado de plegado también
+      const shift = () => {
+        if (!oldOpen) return;
+        sheet.open = Object.fromEntries(Object.entries(oldOpen).filter(([k]) => Number(k) !== i).map(([k, v]) => [Number(k) > i ? Number(k) - 1 : k, v]));
+      };
       undoable(`${exName(old)} quitado`,
-        () => { w.exercises.splice(i, 1); saveWorkout(w.id); renderSheets(); },
-        () => { w.exercises.splice(i, 0, old); saveWorkout(w.id); renderSheets(); });
+        () => { w.exercises.splice(i, 1); tidySupersets(w); shift(); saveWorkout(w.id); renderSheets(); },
+        () => {
+          w.exercises.splice(i, 0, old);
+          w.exercises.forEach((x, k) => { if (ssBefore[k]) x.ss = ssBefore[k]; else delete x.ss; });
+          if (oldOpen) sheet.open = oldOpen;
+          saveWorkout(w.id);
+          renderSheets();
+        });
   },
   'wk-to-routine': async (el, top, act) => {
       const w = S.workouts[top.id];
@@ -899,6 +917,7 @@ Object.assign(ACTIONS, {
       // Limpia series vacías y ejercicios sin series
       w.exercises.forEach((we) => { we.sets = we.sets.filter((st) => st.done || st.kg != null || st.reps != null); });
       w.exercises = w.exercises.filter((we) => we.sets.length);
+      if (!String(w.name || '').trim()) w.name = 'Entrenamiento';
       const wasOpen = !w.end;
       if (wasOpen) w.end = new Date().toISOString();
       saveWorkout(w.id);
@@ -950,7 +969,7 @@ Object.assign(ACTIONS, {
       else addExerciseTo(top.target, el.dataset.id);
   },
   'ex-new': async (el, top, act) => {
-      pushSheet({ type: 'ex-edit', isNew: true, draft: { id: 'u-' + uid(), name: top.q || '', primary: top.muscle ? [top.muscle] : [], secondary: [] }, then: top.target || null });
+      pushSheet({ type: 'ex-edit', isNew: true, draft: { id: 'u-' + uid(), name: top.q || '', primary: top.muscle ? [top.muscle] : [], secondary: [] }, then: top.target || null, thenMode: top.mode, thenIdx: top.idx });
   },
   'ex-history': async (el, top, act) => {
       pushSheet({ type: 'ex-history', id: el.dataset.id });
@@ -977,7 +996,8 @@ Object.assign(ACTIONS, {
       S.exercises[d.id] = { id: d.id, name: d.name, primary: d.primary, secondary: d.secondary, builtin: !!EXERCISES_BY_ID[d.id] };
       saveExercises();
       toast('Ejercicio guardado');
-      if (top.then) addExerciseTo(top.then, d.id);
+      if (top.then && top.thenMode === 'replace') replaceExercise(top.then, top.thenIdx, d.id);
+      else if (top.then) addExerciseTo(top.then, d.id);
       else popSheet();
       return;
   },
@@ -996,9 +1016,9 @@ Object.assign(ACTIONS, {
   'tpl-add': async (el) => {
       const t = TEMPLATES.find((x) => x.id === el.dataset.id);
       if (!t) return;
-      addTemplate(t);
+      const n = addTemplate(t);
       renderSheets();
-      toast(`${t.routines.length} rutinas añadidas`);
+      toast(plural(n, 'rutina añadida', 'rutinas añadidas'));
   },
   'routine-new': async (el, top, act) => {
       pushSheet({ type: 'routine', isNew: true, draft: { id: uid(), name: '', items: [] } });
@@ -1017,6 +1037,14 @@ Object.assign(ACTIONS, {
   },
   'rt-start': async (el, top, act) => {
       if (!saveRoutineDraft(top)) return;
+      const running = workoutsSorted().find((x) => !x.end);
+      if (running) {
+        S.sheets = [];
+        pushSheet({ type: 'workout', id: running.id });
+        render();
+        toast('Rutina guardada. Ya tienes un entrenamiento en curso: termínalo antes de empezar otro.');
+        return;
+      }
       const w = newWorkout(S.routines[top.draft.id]);
       S.sheets = [];
       S.ui.tab = 'entreno';
@@ -1047,14 +1075,11 @@ const multi_set_type = async (el, top, act) => {
         // Una serie se quita junto con sus bajadas o bloques
         let k = 1;
         if (!isSeg(st)) while (we.sets[j + k] && isSeg(we.sets[j + k])) k++;
-        if (k === 1) we.sets.splice(j, 1);
-        else {
-          const old = we.sets.slice(j, j + k);
-          undoable('Serie quitada con sus bajadas o bloques',
-            () => { we.sets.splice(j, k); saveWorkout(w.id); renderSheets(); },
-            () => { we.sets.splice(j, 0, ...old); saveWorkout(w.id); renderSheets(); });
-          return;
-        }
+        const old = we.sets.slice(j, j + k);
+        undoable(k === 1 ? 'Serie quitada' : 'Serie quitada con sus bajadas o bloques',
+          () => { we.sets.splice(j, k); saveWorkout(w.id); renderSheets(); },
+          () => { we.sets.splice(j, 0, ...old); saveWorkout(w.id); renderSheets(); });
+        return;
       } else {
         st.done = !st.done;
         // Al marcarla hecha sin datos, copia lo de la última vez
@@ -1066,7 +1091,8 @@ const multi_set_type = async (el, top, act) => {
           const nextEx = w.exercises[i + 1];
           const nextSet = we.sets[j + 1];
           // Si después viene otro bloque de rest-pause sin hacer, toca la pausa corta
-          if (nextSet && nextSet.t === 'rp' && !nextSet.done) startRest(we.exId, exName(we), RP_REST);
+          // El descanso solo tiene sentido en un entreno en curso, no al corregir uno terminado
+          if (w.end) { /* sin descanso */ } else if (nextSet && nextSet.t === 'rp' && !nextSet.done) startRest(we.exId, exName(we), RP_REST);
           else if (we.ss && nextEx && nextEx.ss === we.ss) toast(`Superserie: ahora ${exName(nextEx)}`);
           else startRest(we.exId, exName(we));
         }
