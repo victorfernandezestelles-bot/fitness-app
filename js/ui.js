@@ -17,7 +17,7 @@ export const ACCESS = {
   readOnly: false,
   acts: new Set(['goto', 'sheet-close', 'sheet-back', 'sheet-back-or-close', 'more', 'confirm-ok',
     'day-prev', 'day-next', 'day-today', 'calendar', 'cal-month', 'cal-day', 'cal-today', 'edit-entry', 'lib',
-    'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m',
+    'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m', 'volh-metric', 'ton-ind',
     'week-prev', 'week-next', 'wtab', 'wview', 'wk-ex-toggle', 'act-open', 'range', 'report-open', 'rep-preset', 'rep-range', 'rep-foods', 'rep-share', 'rep-print', 'rep-file',
     'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
     'export-json', 'export-csv-diario', 'export-csv-resumen', 'export-csv-entrenos', 'export-csv-actividades', 'export-photos']),

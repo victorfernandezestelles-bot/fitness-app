@@ -261,17 +261,30 @@ export const musclesText = (ex) => {
   return p + (s ? ` · también ${s.toLowerCase()}` : '') + (g ? ` · agarre: ${g.toLowerCase()}` : '');
 };
 
+// Kg movidos en unas series: kilos × repeticiones de las series efectivas (sin calentamiento)
+export function setTonnage(sets) {
+  let t = 0;
+  for (const st of sets || []) if (isEffective(st)) t += (Number(st.kg) || 0) * (Number(st.reps) || 0);
+  return t;
+}
+
 export function workoutStats(w) {
   let sets = 0;
   let tonnage = 0;
   for (const we of w.exercises) {
-    for (const st of we.sets) {
-      if (!isEffective(st)) continue;
-      if (!isSeg(st)) sets++;
-      tonnage += (st.kg || 0) * (st.reps || 0);
-    }
+    sets += we.sets.filter((st) => isEffective(st) && !isSeg(st)).length;
+    tonnage += setTonnage(we.sets);
   }
   return { sets, tonnage };
+}
+
+// Tonelaje directo: los kg del ejercicio cuentan solo para sus músculos principales.
+// Indirecto (aparte): los kg de los ejercicios donde el músculo es secundario o de agarre.
+// En pantalla solo se suma al directo si se activa «Añadir tonelaje indirecto».
+function addTonnage(ton, tonInd, ex, exId, kg) {
+  if (!kg) return;
+  for (const m of ex.primary) ton[m] = (ton[m] || 0) + kg;
+  if (tonInd) for (const m of [...ex.secondary, ...gripOf(exId, ex)]) tonInd[m] = (tonInd[m] || 0) + kg;
 }
 
 export const weekVolume = (monday) => periodVolume(monday, addDays(monday, 6));
@@ -279,6 +292,8 @@ export const weekVolume = (monday) => periodVolume(monday, addDays(monday, 6));
 // Series por músculo entre dos fechas (ambas incluidas)
 export function periodVolume(from, end) {
   const vol = Object.fromEntries(MUSCLES.map((m) => [m.k, 0]));
+  const ton = Object.fromEntries(MUSCLES.map((m) => [m.k, 0]));
+  const tonInd = Object.fromEntries(MUSCLES.map((m) => [m.k, 0]));
   const byMuscle = Object.fromEntries(MUSCLES.map((m) => [m.k, {}]));
   let sessions = 0;
   let sets = 0;
@@ -291,9 +306,10 @@ export function periodVolume(from, end) {
       if (!ex || !n) continue;
       sets += we.sets.filter(isMainSet).length;
       addLoad(vol, ex, we.exId, n, byMuscle, exName(we));
+      addTonnage(ton, tonInd, ex, we.exId, setTonnage(we.sets));
     }
   }
-  return { vol, byMuscle, sessions, sets };
+  return { vol, ton, tonInd, byMuscle, sessions, sets };
 }
 
 // Series de la sesión anterior en la que apareció el ejercicio
@@ -581,23 +597,30 @@ export function periodReport(from, to) {
 export function muscleHistory(m, n = 12) {
   const out = [];
   let mon = mondayOf(today());
-  for (let i = 0; i < n; i++) { out.unshift({ mon, v: weekVolume(mon).vol[m] || 0 }); mon = addDays(mon, -7); }
+  for (let i = 0; i < n; i++) {
+    const wv = weekVolume(mon);
+    out.unshift({ mon, v: wv.vol[m] || 0, kg: wv.ton[m] || 0, kgInd: wv.tonInd[m] || 0 });
+    mon = addDays(mon, -7);
+  }
   return out;
 }
 
 /* ---------- mapa de músculos ---------- */
-// Series de un entreno por músculo (1 al principal, 0,5 al secundario) y qué músculos fueron principales
+// Series de un entreno por músculo (1 al principal, 0,5 al secundario), tonelaje directo y qué músculos fueron principales
 export function workoutVolume(w) {
   const vol = {};
+  const ton = {};
+  const tonInd = {};
   const prim = new Set();
   for (const we of w.exercises || []) {
     const ex = getEx(we.exId);
     const n = setLoad(we.sets);
     if (!ex || !n) continue;
     addLoad(vol, ex, we.exId, n);
+    addTonnage(ton, tonInd, ex, we.exId, setTonnage(we.sets));
     for (const m of ex.primary) prim.add(m);
   }
-  return { vol, prim };
+  return { vol, ton, tonInd, prim };
 }
 // Entreno: principal = intenso, solo secundario = suave
 export function workoutLevels(w) {

@@ -3,13 +3,12 @@
 // Los datos los da el servidor (supabase/004-ficha-cliente.sql) solo si el vínculo está en curso.
 // Para pintar se reutilizan los cálculos de la app: mientras se genera el HTML, S apunta un momento
 // a los datos del cliente y vuelve a los propios al terminar (es síncrono: nada se guarda ni se sincroniza entremedias).
-import { MUSCLE_NAME } from './exercises.js';
 import { bodyPair } from './bodymap.js';
 import { $, addDays, dateLong, dateShort, dayLabel, durLabel, esc, fmt, inputVal, num, parseISO, plural, today } from './util.js';
 import { MEALS, S } from './state.js';
-import { MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
+import { MEASURES, SEG_LABEL, dayOf, exName, goalsFor, hasTrainGoals, isEffective, isSeg, mondayOf, qtyLabel, setText, weekLevels, weekReport, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutsSorted } from './derived.js';
 import { ACTIONS, CHANGES, INPUTS, SHEETS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
-import { mapLegend } from './training.js';
+import { mapLegend, workoutMuscles } from './training.js';
 import { drawSeries } from './progress.js';
 import { actName, activitiesSorted } from './cardio.js';
 import { dataFromRows, rpc } from './sync.js';
@@ -363,8 +362,6 @@ SHEETS['fc-workout'] = {
       const w = S.workouts[s.id];
       const st = workoutStats(w);
       const dur = workoutDuration(w);
-      const { vol, prim } = workoutVolume(w);
-      const list = Object.entries(vol).sort((a, b) => (prim.has(b[0]) - prim.has(a[0])) || b[1] - a[1]);
       return `
         <p class="sheet-sub">${dayLabel(w.date)}${dayLabel(w.date) !== dateLong(w.date) ? ` · ${dateLong(w.date)}` : ''}</p>
         <div class="stats">
@@ -374,7 +371,7 @@ SHEETS['fc-workout'] = {
         </div>
         ${bodyPair(workoutLevels(w), 'big', model())}
         ${mapLegend('session')}
-        ${list.length ? `<div class="rep-muscles">${list.map(([m, v]) => `<span class="rep-m${prim.has(m) ? ' in' : ''}">${MUSCLE_NAME[m]} <b>${fmt(v, 1)}</b></span>`).join('')}</div>` : ''}
+        ${workoutMuscles(w)}
         <h3 class="list-title">Ejercicios</h3>
         <ul class="fc-exs">${w.exercises.map((we) => `<li>
           <b>${esc(exName(we))}</b>

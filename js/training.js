@@ -36,7 +36,8 @@ export function newWorkout(fromRoutine) {
 export function viewEntreno() {
   if (!S.ui.week) S.ui.week = mondayOf(today());
   const monday = S.ui.week;
-  const { vol, byMuscle, sessions, sets } = weekVolume(monday);
+  const { vol, ton, tonInd, byMuscle, sessions, sets } = weekVolume(monday);
+  const kgWeek = Object.values(ton).reduce((a, b) => a + b, 0);
   const open = workoutsSorted().find((w) => !w.end);
   const max = Math.max(22, ...Object.values(vol)) * 1.05;
   const pct = (v) => `${((v / max) * 100).toFixed(1)}%`;
@@ -48,8 +49,9 @@ export function viewEntreno() {
     ${MUSCLES.filter((m) => m.g === g).map((m) => {
       const v = vol[m.k];
       const detail = Object.entries(byMuscle[m.k]).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${esc(n)} ${fmt(c, 1)}`).join(' · ');
-      return `<button type="button" class="vol-row${v ? '' : ' zero'}" data-act="vol-history" data-m="${m.k}" aria-label="${m.l}: ${fmt(v, 1)} series. Ver las últimas semanas" title="${detail}">
-        <span class="vol-name">${m.l}</span>
+      const kg = shownKg(ton, tonInd, m.k);
+      return `<button type="button" class="vol-row${v ? '' : ' zero'}" data-act="vol-history" data-m="${m.k}" aria-label="${m.l}: ${fmt(v, 1)} series${kg ? `, ${fmt(kg)} kg de tonelaje${tonIndOn() ? ' directo e indirecto' : ' directo'}` : ''}. Ver las últimas semanas" title="${detail}">
+        <span class="vol-name">${m.l}${kg ? `<span class="vol-kg">${fmt(kg)} kg</span>` : ''}</span>
         <span class="vol-bar" role="presentation"><span class="vol-zone" style="left:${pct(10)};width:${pct(10)}"></span><span class="vol-fill${v >= 10 ? ' in' : ''}" style="width:${pct(v)}"></span></span>
         <span class="vol-val">${fmt(v, 1)}</span>
       </button>`;
@@ -88,7 +90,8 @@ export function viewEntreno() {
         <button type="button" class="icon-btn small" data-act="week-next" aria-label="Semana siguiente" ${thisWeek ? 'disabled' : ''}>›</button>
       </div>
     </div>
-    <p class="muted small-text">${sessions} ${sessions === 1 ? 'entrenamiento' : 'entrenamientos'} · ${sets} series efectivas. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>
+    <p class="muted small-text">${sessions} ${sessions === 1 ? 'entrenamiento' : 'entrenamientos'} · ${sets} series efectivas${kgWeek ? ` · ${fmt(kgWeek)} kg movidos` : ''}. Cada serie suma 1 al músculo principal y 0,5 a los secundarios. Debajo de cada músculo, su tonelaje ${tonIndOn() ? 'directo e indirecto' : 'directo'}.</p>
+    ${kgWeek ? tonSwitch() : ''}
     ${sets ? `<div class="wk-map">${bodyPair(weekLevels(vol), '', bodyModel())}${mapLegend('week')}</div>` : ''}
     <div class="vol">${rows}</div>
     <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series semanales, el rango que se suele usar como referencia para ganar músculo. Toca un músculo para ver sus últimas 12 semanas.</p>
@@ -238,6 +241,7 @@ SHEETS.workout = {
         <b ${w.end ? '' : `class="live-elapsed" data-start="${w.start}"`}>${w.end ? (dur == null ? '–' : durLabel(dur)) : clockLabel(Date.now() - Date.parse(w.start))}</b>
       </div>
       ${st.sets ? (w.end ? `<div class="wk-map">${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</div>` : `<details class="detail compact wk-map" ${s.mapOpen ? 'open' : ''} data-toggle="mapOpen"><summary>Músculos trabajados hasta ahora</summary>${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</details>`) : ''}
+      ${w.end ? workoutMuscles(w) : ''}
       <div class="form-grid">
         <label class="field"><span>Nombre</span><input id="wk-name" type="text" value="${esc(w.name)}" data-input="wk-name" autocomplete="off"></label>
         <label class="field"><span>Fecha</span><input id="wk-date" type="date" value="${w.date}" max="${today()}" data-change="wk-date"></label>
@@ -273,6 +277,39 @@ export function mapLegend(kind) {
 }
 
 /* Resumen al terminar un entreno */
+// «Añadir tonelaje indirecto»: preferencia de este dispositivo (vale igual en la ficha de un cliente)
+export function tonIndOn() {
+  try { return localStorage.getItem('tonInd') === '1'; } catch (e) { return false; }
+}
+// Kg que se enseñan de un músculo: el directo y, si el pincho está activado, también el indirecto
+export const shownKg = (ton, tonInd, m) => (ton[m] || 0) + (tonIndOn() ? tonInd[m] || 0 : 0);
+export function tonSwitch() {
+  const on = tonIndOn();
+  return `<button type="button" class="switch" role="switch" aria-checked="${on}" data-act="ton-ind">
+    <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+    <span>Añadir tonelaje indirecto</span>
+  </button>`;
+}
+const tonHint = () => (tonIndOn()
+  ? 'Kg: tonelaje directo más indirecto. El directo es kg × repeticiones de las series efectivas de los ejercicios en los que el músculo es principal; el indirecto, el de los ejercicios en los que es secundario (por ejemplo, el press de banca para el tríceps), contado entero.'
+  : 'Kg: tonelaje directo (kg × repeticiones de las series efectivas), solo en los músculos principales de cada ejercicio. Activa «Añadir tonelaje indirecto» para sumar también los ejercicios en los que el músculo es secundario.');
+
+// Series y tonelaje de un entreno por músculo (también en la ficha del entrenador)
+export function workoutMuscles(w) {
+  const { vol, ton, tonInd, prim } = workoutVolume(w);
+  const list = Object.entries(vol).sort((a, b) => (prim.has(b[0]) - prim.has(a[0])) || b[1] - a[1]);
+  if (!list.length) return '';
+  return `<h3 class="list-title">Por músculo</h3>
+    ${tonSwitch()}
+    <ul class="mus-list">${list.map(([m, v]) => {
+      const kg = shownKg(ton, tonInd, m);
+      return `<li class="${prim.has(m) ? 'in' : ''}">
+      <span>${MUSCLE_NAME[m]}</span><span><b>${fmt(v, 1)}</b> ${v === 1 ? 'serie' : 'series'}</span><span>${kg ? `${fmt(kg)} kg` : '–'}</span>
+    </li>`;
+    }).join('')}</ul>
+    <p class="hint">${tonHint()} Con tu peso corporal solo cuenta el lastre que apuntes.</p>`;
+}
+
 SHEETS['wk-summary'] = {
   title: () => 'Entreno terminado',
   render: (s) => {
@@ -280,8 +317,6 @@ SHEETS['wk-summary'] = {
     if (!w) return '';
     const st = workoutStats(w);
     const d = workoutDuration(w);
-    const { vol, prim } = workoutVolume(w);
-    const list = Object.entries(vol).sort((a, b) => (prim.has(b[0]) - prim.has(a[0])) || b[1] - a[1]);
     return `
       <p class="sheet-sub"><b>${esc(w.name)}</b> · ${dayLabel(w.date)}</p>
       <div class="stats">
@@ -291,8 +326,7 @@ SHEETS['wk-summary'] = {
       </div>
       ${bodyPair(workoutLevels(w), 'big', bodyModel())}
       ${mapLegend('session')}
-      <h3 class="list-title">Series por músculo</h3>
-      <div class="rep-muscles">${list.map(([m, v]) => `<span class="rep-m${prim.has(m) ? ' in' : ''}">${MUSCLE_NAME[m]} <b>${fmt(v, 1)}</b></span>`).join('')}</div>
+      ${workoutMuscles(w)}
       <div class="sheet-actions">
         <button type="button" class="btn ghost" data-act="wk-summary-open">Ver el entreno</button>
         <button type="button" class="btn primary" data-act="sheet-close">Hecho</button>
@@ -769,6 +803,14 @@ export function restoreRest() {
 HOOKS.visible.push(() => { if (rest) tickRest(); updateWake(); });
 
 /* ---------- acciones ---------- */
+
+Object.assign(ACTIONS, {
+  'ton-ind': () => {
+    try { localStorage.setItem('tonInd', tonIndOn() ? '0' : '1'); } catch (e) { return toast('No se puede guardar esta preferencia en este navegador.'); }
+    render();
+    renderSheets();
+  },
+});
 
 Object.assign(ACTIONS, {
   'start-workout': async (el, top, act) => {

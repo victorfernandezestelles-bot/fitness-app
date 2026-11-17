@@ -4,6 +4,7 @@ import { $, addDays, cap, dateLong, dateShort, deliverFile, durLabel, esc, fmt, 
 import { MEALS, S } from './state.js';
 import { MEASURES, datesBetween, exName, isEffective, isSeg, mondayOf, muscleHistory, periodReport, qtyLabel, setsText, weekReport, workoutDuration } from './derived.js';
 import { ACTIONS, SHEETS, chartTooltip, pushSheet, render, renderSheets, toast } from './ui.js';
+import { tonIndOn, tonSwitch } from './training.js';
 import { actName } from './cardio.js';
 
 // La última semana completa: el informe de una semana sale el lunes siguiente
@@ -180,50 +181,65 @@ h3{margin:22px 0 8px;font-size:17px}h4{margin:0 0 6px;font-size:15px}p{margin:4p
 
 /* Historial de series de un músculo: últimas 12 semanas con la zona de 10 a 20 */
 SHEETS['vol-history'] = {
-  title: () => 'Series por semana',
+  title: () => 'Por semana',
   render: (s) => `
-    <div class="chips scroll" role="group" aria-label="Músculo">
+    <div class="segmented" role="tablist" aria-label="Qué medir">
+      <button type="button" role="tab" aria-selected="${s.metric !== 'kg'}" data-act="volh-metric" data-v="sets">Series</button>
+      <button type="button" role="tab" aria-selected="${s.metric === 'kg'}" data-act="volh-metric" data-v="kg">Tonelaje</button>
+    </div>
+    ${s.metric === 'kg' ? tonSwitch() : ''}
+    <div class="chips scroll top-gap" role="group" aria-label="Músculo">
       ${MUSCLES.map((m) => `<button type="button" class="chip${s.m === m.k ? ' on' : ''}" data-act="volh-m" data-m="${m.k}" aria-pressed="${s.m === m.k}">${m.l}</button>`).join('')}
     </div>
     <h3 class="cal-title top-gap">${MUSCLE_NAME[s.m]}</h3>
     <div class="chart" id="volh-chart"></div>
-    <p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series por semana. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>`,
-  mount: (s) => drawVolHistory(s.m),
+    ${s.metric === 'kg'
+    ? `<p class="hint">${tonIndOn() ? 'Tonelaje directo más indirecto: kg × repeticiones de las series efectivas de los ejercicios en los que este músculo es principal, más los de aquellos en los que es secundario.' : 'Tonelaje directo: kg × repeticiones de las series efectivas, solo de los ejercicios en los que este músculo es el principal.'} Con el peso corporal solo cuenta el lastre que apuntes.</p>`
+    : '<p class="hint"><span class="zone-key"></span> Zona de 10 a 20 series por semana. Cada serie suma 1 al músculo principal y 0,5 a los secundarios.</p>'}`,
+  mount: (s) => drawVolHistory(s.m, s.metric === 'kg' ? 'kg' : 'v'),
 };
 
-function drawVolHistory(m) {
+function drawVolHistory(m, key = 'v') {
   const host = $('#volh-chart');
   if (!host) return;
   const data = muscleHistory(m, 12);
+  const kg = key === 'kg';
+  const ind = kg && tonIndOn();
+  const val = (d) => (ind ? d.kg + d.kgInd : d[key]);
   const W = Math.max(280, host.clientWidth);
   const H = 190;
   const mg = { l: 30, r: 8, t: 12, b: 24 };
-  const top = Math.max(24, Math.ceil(Math.max(...data.map((d) => d.v)) / 4) * 4 + 2);
+  const maxV = Math.max(...data.map(val));
+  // Escala: series hasta un múltiplo de 4; kg hasta un número redondo
+  const step = kg ? Math.max(500, 10 ** Math.floor(Math.log10(Math.max(maxV, 1))) / 2) : 4;
+  const top = kg ? Math.max(1000, Math.ceil((maxV * 1.08) / step) * step) : Math.max(24, Math.ceil(maxV / 4) * 4 + 2);
+  const ticks = kg ? [0, top / 2, top] : [0, 10, 20].filter((x) => x <= top);
   const ys = (v) => mg.t + (1 - v / top) * (H - mg.t - mg.b);
   const bw = (W - mg.l - mg.r) / data.length;
-  let g = `<rect class="zone" x="${mg.l}" width="${W - mg.l - mg.r}" y="${ys(20).toFixed(1)}" height="${(ys(10) - ys(20)).toFixed(1)}"/>`;
-  for (const v of [0, 10, 20].filter((x) => x <= top)) {
+  let g = kg ? '' : `<rect class="zone" x="${mg.l}" width="${W - mg.l - mg.r}" y="${ys(20).toFixed(1)}" height="${(ys(10) - ys(20)).toFixed(1)}"/>`;
+  for (const v of ticks) {
     const y = ys(v).toFixed(1);
-    g += `<line class="grid" x1="${mg.l}" x2="${W - mg.r}" y1="${y}" y2="${y}"/><text class="axis" x="${mg.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${v}</text>`;
+    const lbl = kg && v >= 1000 ? `${fmt(v / 1000, 1)}t` : fmt(v);
+    g += `<line class="grid" x1="${mg.l}" x2="${W - mg.r}" y1="${y}" y2="${y}"/><text class="axis" x="${mg.l - 6}" y="${y}" dy="0.32em" text-anchor="end">${lbl}</text>`;
   }
   const bars = data.map((d, i) => {
     const x = mg.l + i * bw + 3;
     const w = Math.max(2, bw - 6);
     const lbl = i % 2 === 1 ? `<text class="axis" x="${(x + w / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${parseISO(d.mon).getDate()}/${parseISO(d.mon).getMonth() + 1}</text>` : '';
-    if (!d.v) return lbl;
-    const y = ys(d.v);
+    if (!val(d)) return lbl;
+    const y = ys(val(d));
     const h = H - mg.b - y;
     const r = Math.min(4, w / 2, h);
-    return `<path class="s-bar${d.v >= 10 ? ' hit' : ''}" d="M${x},${H - mg.b}V${(y + r).toFixed(1)}Q${x},${y.toFixed(1)} ${x + r},${y.toFixed(1)}H${(x + w - r).toFixed(1)}Q${x + w},${y.toFixed(1)} ${x + w},${(y + r).toFixed(1)}V${H - mg.b}Z"/>${lbl}`;
+    return `<path class="s-bar${!kg && d.v >= 10 ? ' hit' : ''}" d="M${x},${H - mg.b}V${(y + r).toFixed(1)}Q${x},${y.toFixed(1)} ${x + r},${y.toFixed(1)}H${(x + w - r).toFixed(1)}Q${x + w},${y.toFixed(1)} ${x + w},${(y + r).toFixed(1)}V${H - mg.b}Z"/>${lbl}`;
   }).join('');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Series semanales de ${MUSCLE_NAME[m]} en las últimas 12 semanas">${g}${bars}</svg>`;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${kg ? (ind ? 'Tonelaje directo e indirecto semanal' : 'Tonelaje directo semanal') : 'Series semanales'} de ${MUSCLE_NAME[m]} en las últimas 12 semanas">${g}${bars}</svg>`;
   const svg = host.querySelector('svg');
   const tip = chartTooltip(host);
   const move = (ev) => {
     const rc = svg.getBoundingClientRect();
     const x = ((ev.clientX - rc.left) / rc.width) * W;
     const i = Math.max(0, Math.min(data.length - 1, Math.floor((x - mg.l) / bw)));
-    tip.innerHTML = `<b>Semana del ${dateShort(data[i].mon)}</b><span>${fmt(data[i].v, 1)} series</span>`;
+    tip.innerHTML = `<b>Semana del ${dateShort(data[i].mon)}</b><span>${fmt(data[i].v, 1)} series · ${fmt(data[i].kg)} kg directos${ind ? ` · ${fmt(data[i].kgInd)} kg indirectos` : ''}</span>`;
     tip.hidden = false;
     tip.style.left = `${Math.min(Math.max(((mg.l + (i + 0.5) * bw) / W) * rc.width, 60), rc.width - 60)}px`;
   };
@@ -290,4 +306,5 @@ Object.assign(ACTIONS, {
   },
   'vol-history': (el) => pushSheet({ type: 'vol-history', m: el.dataset.m }),
   'volh-m': (el, top) => { top.m = el.dataset.m; renderSheets(); },
+  'volh-metric': (el, top) => { top.metric = el.dataset.v; renderSheets(); },
 });

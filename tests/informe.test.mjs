@@ -67,3 +67,28 @@ test('un periodo corto no calcula tendencia y uno vacío no falla', () => {
   assert.equal(r.weight.avg, null);
   assert.equal(r.kcal.avg, null);
 });
+
+test('tonelaje directo: kg × repeticiones solo en los músculos principales, sin calentamiento', async () => {
+  reset();
+  const { workoutVolume, setTonnage, muscleHistory } = await import('../js/derived.js');
+  const { getEx } = await import('../js/derived.js');
+  const banca = getEx('x-press-banca');
+  S.workouts.w = { id: 'w', date: '2026-10-28', exercises: [{ exId: 'x-press-banca', sets: [
+    { kg: 40, reps: 10, t: 'w', done: true }, // calentamiento: no cuenta
+    { kg: 80, reps: 8, t: 'n', done: true },
+    { kg: 80, reps: 6, t: 'n', done: true },
+    { kg: 60, reps: 5, t: 'd', done: true }, // la bajada sí cuenta
+    { kg: 80, reps: null, t: 'n', done: false }, // vacía: no cuenta
+  ] }] };
+  assert.equal(setTonnage(S.workouts.w.exercises[0].sets), 80 * 8 + 80 * 6 + 60 * 5);
+  const wv = workoutVolume(S.workouts.w);
+  for (const m of banca.primary) assert.equal(wv.ton[m], 1420);
+  for (const m of banca.secondary) assert.equal(wv.ton[m] || 0, 0, 'el secundario no suma tonelaje directo');
+  for (const m of banca.secondary) assert.equal(wv.tonInd[m], 1420, 'pero sí indirecto');
+  for (const m of banca.primary) assert.equal(wv.tonInd[m] || 0, 0);
+  const pv = periodVolume('2026-10-26', '2026-11-01');
+  for (const m of banca.primary) assert.equal(pv.ton[m], 1420);
+  for (const m of banca.secondary) assert.equal(pv.tonInd[m], 1420, 'el indirecto se guarda aparte');
+  assert.equal(muscleHistory(banca.primary[0], 3).length, 3);
+  assert.ok(muscleHistory(banca.secondary[0], 3).every((d) => d.kg === 0 && 'kgInd' in d));
+});
