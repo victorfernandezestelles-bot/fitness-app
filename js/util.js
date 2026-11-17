@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.22.1';
+export const APP_VERSION = '0.22.2';
 
 /* ---------- utilidades ---------- */
 
@@ -80,6 +80,8 @@ export const csvText = (s) => {
   if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+([.,]\d+)?$/.test(t)) t = "'" + t; // que Excel no lo tome por una fórmula
   return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 };
+// Día corto de una marca de tiempo del servidor, o «–» si no hay
+export const dayOrDash = (ts) => (ts ? dateShort(localDay(ts)) : '–');
 // Número con signo: +1,2 / −0,4 / ±0
 export const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v), d);
 export const csvNum = (n, d = 1) => (n == null ? '' : (Math.round(n * 10 ** d) / 10 ** d).toString().replace('.', ','));

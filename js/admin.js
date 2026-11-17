@@ -1,6 +1,6 @@
 // Pestaña Administración (solo cuentas de desarrollador): usuarios, códigos de activación y solicitudes.
 // Todo pasa por funciones del servidor que comprueban que quien llama es desarrollador.
-import { $, dateShort, esc, fmt, iso, localDay, norm, num, plural } from './util.js';
+import { $, dayOrDash, esc, fmt, iso, norm, num, plural } from './util.js';
 import { S } from './state.js';
 import { ACTIONS, FORMS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, pushSheet, render, renderSheets, toast } from './ui.js';
 import { rpc } from './sync.js';
@@ -30,7 +30,6 @@ async function load(what, force = false) {
 }
 
 const tabOf = () => S.ui.atab || 'users';
-const when = (iso) => (iso ? `${dateShort(localDay(iso))}` : '–');
 const userLabel = (u) => esc(u.name || u.email || 'Sin nombre');
 const matches = (u, f) => (f === 'all' ? true : f === 'blocked' ? u.blocked : u.role === f && !u.blocked);
 
@@ -53,7 +52,7 @@ function userRows(shown) {
   if (!shown.length) return '<p class="empty">Ningún usuario con este filtro.</p>';
   const pl = pageList('admin-users', shown, 30, (u) => `<li><button type="button" class="row" data-act="adm-user" data-id="${u.id}">
       <span class="row-main">${userLabel(u)}${u.blocked ? ' <em class="tag tag-danger">bloqueado</em>' : ''}</span>
-      <span class="row-sub">${esc(u.email || '')} · ${ROLE_NAME[u.role] || u.role}${linkInfo(u)} · alta ${when(u.created_at)}${u.last_activity ? ` · activo ${when(u.last_activity)}` : ''}</span>
+      <span class="row-sub">${esc(u.email || '')} · ${ROLE_NAME[u.role] || u.role}${linkInfo(u)} · alta ${dayOrDash(u.created_at)}${u.last_activity ? ` · activo ${dayOrDash(u.last_activity)}` : ''}</span>
     </button></li>`);
   return `<ul class="list">${pl.html}</ul>${pl.more}`;
 }
@@ -71,7 +70,7 @@ function codeStatus(c) {
   if (c.revoked) return ['Anulado', 'off'];
   if (c.uses_left < 1) return ['Usado', 'off'];
   if (Date.parse(c.expires_at) < Date.now()) return ['Caducado', 'off'];
-  return [`Hasta el ${when(c.expires_at)}`, 'ok'];
+  return [`Hasta el ${dayOrDash(c.expires_at)}`, 'ok'];
 }
 
 function codesView() {
@@ -112,13 +111,13 @@ function requestsView() {
   const done = list.filter((r) => r.status !== 'pending');
   const ext = (r) => r.kind === 'extension';
   const card = (r) => `<li class="req${r.status === 'pending' ? ' pending' : ''}">
-    <div class="req-head"><b>${userLabel(r)}</b><span class="muted">${when(r.created_at)}</span></div>
+    <div class="req-head"><b>${userLabel(r)}</b><span class="muted">${dayOrDash(r.created_at)}</span></div>
     <p><em class="tag">${ext(r) ? 'Ampliar plazo' : 'Ser entrenador'}</em></p>
     <p class="muted">${esc(r.email || '')} · ${ROLE_NAME[r.role] || r.role}${ext(r) && r.status === 'pending' ? ` · ${plural(Number(r.clients) || 0, 'cliente', 'clientes')}${r.unlink_at ? ` · se desvinculan el ${dateNum(r.unlink_at)}` : ''}` : ''}</p>
     <p class="req-msg">${esc(r.message || '(sin mensaje)')}</p>
     ${r.status === 'pending'
       ? `<div class="btn-row two"><button type="button" class="btn ghost" data-act="adm-resolve" data-id="${r.id}" data-v="0">Rechazar</button><button type="button" class="btn" data-act="adm-resolve" data-id="${r.id}" data-v="1">${ext(r) ? 'Ampliar' : 'Aprobar'}</button></div>`
-      : `<p class="req-done">${r.status === 'approved' ? (ext(r) && r.until ? `Ampliado hasta el ${dateNum(r.until)}` : 'Aprobada') : 'Rechazada'} · ${when(r.resolved_at)}${r.reply ? ` · «${esc(r.reply)}»` : ''}</p>`}
+      : `<p class="req-done">${r.status === 'approved' ? (ext(r) && r.until ? `Ampliado hasta el ${dateNum(r.until)}` : 'Aprobada') : 'Rechazada'} · ${dayOrDash(r.resolved_at)}${r.reply ? ` · «${esc(r.reply)}»` : ''}</p>`}
   </li>`;
   return `
     ${pend.length ? `<h3 class="list-title">Pendientes (${pend.length})</h3><ul class="req-list">${pend.map(card).join('')}</ul>` : '<p class="empty">No hay solicitudes pendientes.</p>'}
@@ -134,7 +133,7 @@ function foodsView() {
     <p class="hint">Productos que los usuarios han añadido al escanear códigos que Open Food Facts no tiene. Primero los que tienen avisos de error.</p>
     <ul class="list top-gap">${list.map((f) => `<li><button type="button" class="row" data-act="adm-food" data-v="${esc(f.barcode)}">
       <span class="row-main">${esc(f.name)}${f.brand ? ` <small class="muted">${esc(f.brand)}</small>` : ''}${f.hidden ? ' <em class="tag tag-off">oculto</em>' : ''}${Number(f.reports) ? ` <em class="tag tag-danger">${plural(Number(f.reports), 'aviso', 'avisos')}</em>` : ''}</span>
-      <span class="row-sub"><code>${esc(f.barcode)}</code> · ${fmt(f.kcal)} kcal/100 g · ${esc(f.author || 'cuenta borrada')} · ${when(f.updated_at)}</span>
+      <span class="row-sub"><code>${esc(f.barcode)}</code> · ${fmt(f.kcal)} kcal/100 g · ${esc(f.author || 'cuenta borrada')} · ${dayOrDash(f.updated_at)}</span>
     </button></li>`).join('')}</ul>`;
 }
 
@@ -165,9 +164,9 @@ SHEETS['admin-user'] = {
         <div class="rep-line"><span class="rep-l">Nombre</span><span class="rep-v small">${esc(u.name || '–')}</span></div>
         <div class="rep-line"><span class="rep-l">Tipo</span><span class="rep-v small">${ROLE_NAME[u.role] || u.role}</span></div>
         <div class="rep-line"><span class="rep-l">Estado</span><span class="rep-v small">${u.blocked ? 'Bloqueado' : u.role === 'pending' ? 'Sin activar' : 'Activo'}</span></div>
-        <div class="rep-line"><span class="rep-l">Alta</span><span class="rep-v small">${when(u.created_at)}</span></div>
-        <div class="rep-line"><span class="rep-l">Activado</span><span class="rep-v small">${when(u.activated_at)}${u.code_used ? ` · ${esc(u.code_used)}` : ''}</span></div>
-        <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${when(u.last_activity)}</span></div>
+        <div class="rep-line"><span class="rep-l">Alta</span><span class="rep-v small">${dayOrDash(u.created_at)}</span></div>
+        <div class="rep-line"><span class="rep-l">Activado</span><span class="rep-v small">${dayOrDash(u.activated_at)}${u.code_used ? ` · ${esc(u.code_used)}` : ''}</span></div>
+        <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${dayOrDash(u.last_activity)}</span></div>
         ${u.trainer_name ? `<div class="rep-line"><span class="rep-l">Entrenador</span><span class="rep-v small">${esc(u.trainer_name)}${u.link_status === 'blocked' ? ' · le ha pausado' : ''}</span></div>` : ''}
         ${Number(u.clients) ? `<div class="rep-line"><span class="rep-l">Clientes</span><span class="rep-v small">${u.clients}${u.unlink_at ? ` · se desvinculan el ${dateNum(u.unlink_at)}` : ''}</span></div>` : ''}
       </div>
@@ -192,7 +191,7 @@ SHEETS['admin-food'] = {
         <div class="rep-line"><span class="rep-l">Código</span><span class="rep-v small"><code>${esc(f.barcode)}</code></span></div>
         <div class="rep-line"><span class="rep-l">Marca</span><span class="rep-v small">${esc(f.brand || '–')}</span></div>
         <div class="rep-line"><span class="rep-l">Lo añadió</span><span class="rep-v small">${esc(f.author || 'cuenta borrada')}</span></div>
-        <div class="rep-line"><span class="rep-l">Actualizado</span><span class="rep-v small">${when(f.updated_at)}</span></div>
+        <div class="rep-line"><span class="rep-l">Actualizado</span><span class="rep-v small">${dayOrDash(f.updated_at)}</span></div>
         ${PER100_L.filter(([k]) => f.per100?.[k] != null).map(([k, l, u]) => `<div class="rep-line"><span class="rep-l">${l}</span><span class="rep-v small">${fmt(f.per100[k], 1)} ${u}</span></div>`).join('')}
       </div>
       ${Number(f.reports) ? `<h3 class="list-title">Avisos (${f.reports})</h3><p class="req-msg">${esc(f.reasons || 'Sin comentario')}</p>` : ''}

@@ -168,7 +168,7 @@ function explain(e) {
   if (e.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
   if (/invalid_credentials|invalid_grant|Invalid login/i.test(c)) return 'El correo o la contraseña no son correctos.';
   if (/user_already_exists|already registered/i.test(c)) return 'Ya hay una cuenta con ese correo. Pulsa «Entrar».';
-  if (/weak_password|at least/i.test(c)) return 'La contraseña es demasiado débil. Usa al menos 8 caracteres, con letras y números.';
+  if (/weak_password|at least/i.test(c)) return 'La contraseña es demasiado corta: usa al menos 6 caracteres (mejor 8 o más, con letras y números).';
   if (/email_not_confirmed/i.test(c)) return 'Falta confirmar el correo. En Supabase, desactiva «Confirm email».';
   if (/validation_failed|invalid.*email|email_address_invalid/i.test(c)) return 'Ese correo no parece válido.';
   if (/over_.*rate_limit|rate limit|429/i.test(c)) return 'Demasiados intentos seguidos. Espera un minuto.';

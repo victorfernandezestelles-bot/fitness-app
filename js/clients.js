@@ -1,7 +1,7 @@
 // Pestaña Clientes (entrenadores y desarrolladores): su código, las solicitudes y la lista de clientes
 // con pausar, reanudar y desvincular. También la ve quien dejó de ser entrenador mientras le quedan clientes,
 // con el aviso del plazo y la solicitud para ampliarlo. Las reglas están en supabase/003-entrenadores.sql.
-import { $, dateShort, esc, iso, localDay, norm, plural, today } from './util.js';
+import { $, dayOrDash, esc, norm, plural, today } from './util.js';
 import { S, SAVED } from './state.js';
 import { ACTIONS, INPUTS, SHEETS, VIEWS, closeSheets, pushSheet, render, renderSheets, toast } from './ui.js';
 import { SYNC_HOOKS, rpc } from './sync.js';
@@ -30,7 +30,6 @@ async function load(force = false) {
 }
 
 const find = (id) => (data.list || []).find((c) => c.link_id === Number(id));
-const when = (iso) => (iso ? dateShort(localDay(iso)) : '–');
 const label = (c) => esc(c.name || c.email || 'Sin nombre');
 const isTrainer = () => ['trainer', 'dev'].includes(myProfile()?.role);
 const FILTERS = [['active', 'Activos'], ['blocked', 'Pausados'], ['banned', 'Solicitudes bloqueadas']];
@@ -59,7 +58,7 @@ function offNotice(p) {
   if (isTrainer() || !c?.unlink_at) return '';
   const ext = c.extension;
   const extLine = !ext ? ''
-    : ext.status === 'pending' ? `<p>Has pedido ampliar el plazo el ${when(ext.created_at)}: pendiente de revisar.</p>`
+    : ext.status === 'pending' ? `<p>Has pedido ampliar el plazo el ${dayOrDash(ext.created_at)}: pendiente de revisar.</p>`
     : ext.status === 'approved' ? `<p>Se amplió el plazo${ext.until ? ` hasta el ${dateNum(ext.until)}` : ''}${ext.reply ? `: «${esc(ext.reply)}»` : '.'}</p>`
     : `<p>No se aprobó ampliar el plazo${ext.reply ? `: «${esc(ext.reply)}»` : '.'}</p>`;
   return `
@@ -75,7 +74,7 @@ function requestRows(list) {
   return `
     <h3 class="list-title">Solicitudes (${list.length})</h3>
     <ul class="req-list">${list.map((c) => `<li class="req pending">
-      <div class="req-head"><b>${label(c)}</b><span class="muted">${when(c.created_at)}</span></div>
+      <div class="req-head"><b>${label(c)}</b><span class="muted">${dayOrDash(c.created_at)}</span></div>
       <p class="muted">${esc(c.email || '')}</p>
       ${isTrainer() ? `<div class="btn-row two">
         <button type="button" class="btn ghost" data-act="cl-reject" data-id="${c.link_id}">Rechazar</button>
@@ -90,7 +89,7 @@ function clientRows(shown, f) {
   }
   return `<ul class="list">${shown.map((c) => `<li><button type="button" class="row" data-act="cl-open" data-id="${c.link_id}">
       <span class="row-main">${label(c)}${c.status === 'blocked' ? ' <em class="tag tag-danger">pausado</em>' : ''}</span>
-      <span class="row-sub">${f === 'banned' ? `${esc(c.email || '')} · bloqueada el ${when(c.created_at)}` : `${esc(c.email || '')} · desde el ${when(c.accepted_at)} · ${lastSeen(c)}`}</span>
+      <span class="row-sub">${f === 'banned' ? `${esc(c.email || '')} · bloqueada el ${dayOrDash(c.created_at)}` : `${esc(c.email || '')} · desde el ${dayOrDash(c.accepted_at)} · ${lastSeen(c)}`}</span>
     </button></li>`).join('')}</ul>`;
 }
 
@@ -155,9 +154,9 @@ SHEETS['client'] = {
     return `
       <div class="rep">
         <div class="rep-line"><span class="rep-l">Correo</span><span class="rep-v small">${esc(c.email || '')}</span></div>
-        <div class="rep-line"><span class="rep-l">Estado</span><span class="rep-v small">${c.status === 'blocked' ? `Pausado desde el ${when(c.blocked_at)}` : 'Activo'}</span></div>
-        <div class="rep-line"><span class="rep-l">Cliente desde</span><span class="rep-v small">${when(c.accepted_at)}</span></div>
-        <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${when(c.last_activity)}</span></div>
+        <div class="rep-line"><span class="rep-l">Estado</span><span class="rep-v small">${c.status === 'blocked' ? `Pausado desde el ${dayOrDash(c.blocked_at)}` : 'Activo'}</span></div>
+        <div class="rep-line"><span class="rep-l">Cliente desde</span><span class="rep-v small">${dayOrDash(c.accepted_at)}</span></div>
+        <div class="rep-line"><span class="rep-l">Última actividad</span><span class="rep-v small">${dayOrDash(c.last_activity)}</span></div>
         ${c.unlink_at ? `<div class="rep-line"><span class="rep-l">Se desvincula</span><span class="rep-v small">${dateNum(c.unlink_at)}</span></div>` : ''}
       </div>
       ${isTrainer() ? `<p class="hint">${c.status === 'blocked' ? 'Mientras esté pausado, puede ver y descargar sus datos, pero no usar la app.' : 'Si lo pausas, podrá ver y descargar sus datos, pero no usar la app hasta que lo reanudes.'}</p>` : ''}
