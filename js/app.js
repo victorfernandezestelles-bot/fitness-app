@@ -5,7 +5,7 @@ import { flushAll, loadState } from './state.js';
 import { HOOKS, applyTheme, initEvents, render } from './ui.js';
 import { restoreRest } from './training.js';
 import { maybeOnboard } from './onboarding.js';
-import { initSync } from './sync.js';
+import { initSync, openRecovery, takeRecoveryLink } from './sync.js';
 import { accessState, initAccount } from './account.js';
 // Cada sección registra sus vistas, hojas y acciones al cargarse
 import './admin.js';
@@ -50,6 +50,7 @@ function showUpdate(version) {
 /* ---------- arranque ---------- */
 
 async function boot() {
+  const recovery = takeRecoveryLink(); // antes que nada, para quitar el enlace de la dirección
   initEvents();
   try {
     await loadState();
@@ -62,7 +63,10 @@ async function boot() {
   restoreRest();
   await initSync();
   await initAccount();
-  if (accessState() === 'active') maybeOnboard();
+  if (recovery) openRecovery(recovery);
+  else if (accessState() === 'active') maybeOnboard();
+  // Si la app ya estaba abierta en esta pestaña, el enlace del correo solo cambia lo que va tras «#»
+  window.addEventListener('hashchange', () => openRecovery(takeRecoveryLink()));
   store.askPersist();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

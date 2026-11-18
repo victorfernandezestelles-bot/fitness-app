@@ -76,9 +76,17 @@ Los datos guardados llevan un número de versión (ahora la 3, que añade el car
 
 Proyecto `fitness-app` en Supabase (región UE, Irlanda). Una sola tabla, `kv`, con una fila por dato (un día, un entreno, un alimento…) y la regla de seguridad «cada cuenta solo lee y escribe sus filas». El inicio de sesión es con correo y contraseña, sin confirmación por correo (el plan gratuito no deja cambiar las plantillas de correo sin un servidor de correo propio). La clave de `js/config.js` es la pública (*publishable*); la secreta no está en el código.
 
+**«He olvidado mi contraseña»** (desde la 0.24.0). La app pide el correo a Supabase con `redirect_to` igual a su propia dirección; el enlace del correo vuelve a la app, que lo quita enseguida de la barra de direcciones y pide la contraseña nueva. Para que funcione hay que configurar en Supabase:
+
+1. **Authentication › URL Configuration**: *Site URL* `https://victorfernandezestelles-bot.github.io/fitness-app/` y, en *Redirect URLs*, esa misma dirección (y `http://localhost:8765/` para pruebas). Si falta, el enlace del correo lleva a una página rota.
+2. **Correo**: el servicio de correo de Supabase por defecto solo envía a los miembros del equipo del proyecto y unos 2 correos por hora; a los demás la app les dice que no se puede enviar. Para usuarios reales hace falta un servidor de correo propio (SMTP) en **Authentication › Emails › SMTP Settings**.
+3. **Plantilla** (solo con correo propio; sin él Supabase no deja editarla): en **Authentication › Emails › Templates › Reset password**, poner el texto en español y el enlace `{{ .RedirectTo }}#token_hash={{ .TokenHash }}&type=recovery`. Así el enlace solo lleva un código de un uso que la app canjea al guardar, y los antivirus del correo no lo gastan al revisarlo. Con la plantilla por defecto también funciona: el enlace trae una sesión que la app cierra al terminar o al cerrar la hoja.
+
+Cambiar la contraseña cierra en el servidor las demás sesiones de esa cuenta: en los otros dispositivos la app pide volver a entrar, sin perder nada de lo que tengan.
+
 ## Pendiente
 
-- Para la versión pública: servidor de correo propio, confirmar el correo al crear la cuenta y recuperar la contraseña desde la app.
+- Para la versión pública: servidor de correo propio (lo necesitan «He olvidado mi contraseña» y confirmar el correo al crear la cuenta).
 - Más adelante: app nativa para iOS y Android, sueño desde Salud o el reloj, y estimar platos del comedor a partir de una foto.
 
 ## Notas

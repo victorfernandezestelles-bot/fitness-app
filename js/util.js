@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.23.0';
+export const APP_VERSION = '0.24.0';
 
 /* ---------- utilidades ---------- */
 
@@ -20,6 +20,19 @@ export function cleanData(v, key = '', free = false) {
   }
   return v;
 }
+// Lo que trae tras «#» un enlace de los correos de Supabase. Devuelve null si no es un enlace de cuenta.
+// strip: hay que quitarlo de la dirección (lleva códigos o sesiones). rec: qué hoja abrir (solo «recuperar contraseña»).
+export function parseAuthLink(hash) {
+  const q = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+  if (!['access_token', 'refresh_token', 'token_hash', 'error', 'error_code'].some((k) => q.has(k))) return null;
+  const recovery = q.get('type') === 'recovery';
+  let rec = null;
+  if (recovery && q.get('token_hash')) rec = { hash: q.get('token_hash') };
+  else if (recovery && q.get('access_token')) rec = { token: q.get('access_token') };
+  else if (q.has('error') || q.has('error_code')) rec = { linkError: q.get('error_code') || q.get('error') || 'invalid' };
+  return { strip: true, rec };
+}
+
 export const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 export const isImageData = (s) => typeof s === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(s);
 export const num = (v) => {

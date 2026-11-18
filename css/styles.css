@@ -1143,3 +1143,6 @@ body.sheet-open .tabbar { -webkit-backdrop-filter: none; backdrop-filter: none; 
 .switch[aria-checked="true"] .switch-track { background: var(--accent); }
 .switch[aria-checked="true"] .switch-knob { transform: translateX(18px); }
 .switch:focus-visible .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* «He olvidado mi contraseña»: enlace con área táctil de 44 px */
+.tap-link { min-height: 44px; padding: 10px 0; }

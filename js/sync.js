@@ -5,7 +5,7 @@
 // ahí se juntan las comidas de los dos.
 import * as store from './store.js';
 import { SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { $, cleanData, esc, isDate, plain, uid } from './util.js';
+import { $, cleanData, esc, isDate, parseAuthLink, plain, uid } from './util.js';
 import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout, wipeAll } from './state.js';
 import { ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { keepAwake } from './training.js';
@@ -171,6 +171,11 @@ function explain(e) {
   if (/weak_password|at least/i.test(c)) return 'La contraseña es demasiado corta: usa al menos 6 caracteres (mejor 8 o más, con letras y números).';
   if (/email_not_confirmed/i.test(c)) return 'Falta confirmar el correo. En Supabase, desactiva «Confirm email».';
   if (/validation_failed|invalid.*email|email_address_invalid/i.test(c)) return 'Ese correo no parece válido.';
+  if (/same_password/i.test(c)) return 'La contraseña nueva tiene que ser distinta de la anterior.';
+  if (/email_address_not_authorized/i.test(c)) return 'Ahora mismo la app no puede enviar correos a esa dirección. Pide ayuda a quien te dio acceso a la app.';
+  if (/over_email_send_rate_limit/i.test(c)) return /after \d+ seconds?/i.test(c)
+    ? 'Acabas de pedir un correo. Espera un minuto antes de pedir otro.'
+    : 'Se han pedido demasiados correos hace poco. Espera un rato (puede ser hasta una hora) y vuelve a probar.';
   if (/over_.*rate_limit|rate limit|429/i.test(c)) return 'Demasiados intentos seguidos. Espera un minuto.';
   if (/signup_disabled/i.test(c)) return 'El servidor no admite cuentas nuevas ahora mismo.';
   if (/too_big/.test(c)) return 'Hay un dato demasiado grande para sincronizarlo.';
@@ -191,6 +196,16 @@ function setSession(s) {
   };
 }
 
+// La sesión ya no vale en el servidor: se olvida solo la sesión. Los datos y lo pendiente de subir se quedan,
+// y al volver a entrar con la misma cuenta se sigue donde estaba.
+async function endSession() {
+  epoch++;
+  auth = null;
+  await store.del('sync:auth');
+  setStatus('off');
+  SYNC_HOOKS.auth.forEach((fn) => fn(false));
+}
+
 async function ensureToken(force = false) {
   if (!auth) throw new SyncError('Sin sesión', 'no_session', 401);
   if (!force && auth.expires_at * 1000 - 60000 > Date.now()) return auth.access_token;
@@ -199,11 +214,7 @@ async function ensureToken(force = false) {
     await saveAuth();
   } catch (e) {
     if (e.code !== 'offline' && e.status >= 400 && e.status < 500) {
-      epoch++;
-      auth = null;
-      await store.del('sync:auth');
-      setStatus('off');
-      SYNC_HOOKS.auth.forEach((fn) => fn(false));
+      await endSession();
       throw new SyncError('La sesión ha caducado. Vuelve a entrar.', 'expired', 401);
     }
     throw e;
@@ -421,6 +432,7 @@ SHEETS.login = {
       <label class="field"><span>Tu nombre <small class="muted">(solo al crear la cuenta)</small></span><input id="lg-name" type="text" autocomplete="name" value="${esc(s.name || '')}" maxlength="60"></label>
       <label class="field"><span>Contraseña</span><input id="lg-pass" type="password" autocomplete="${s.mode === 'signup' ? 'new-password' : 'current-password'}" minlength="6" value="${esc(s.pw || '')}" required></label>
       ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <p><button type="button" class="link tap-link" data-act="sync-forgot">He olvidado mi contraseña</button></p>
       <div class="sheet-actions">
         <button type="button" class="btn ghost" data-act="sync-signup" ${s.busy ? 'disabled' : ''}>Crear cuenta</button>
         <button type="submit" class="btn primary" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Un momento…' : 'Entrar'}</button>
@@ -428,6 +440,127 @@ SHEETS.login = {
     </form>
     <p class="hint">Al entrar se descargan los datos de tu cuenta. Si en este teléfono quedaban datos de otra cuenta, se borran del teléfono (no de esa cuenta) para que no se mezclen.</p>`,
 };
+
+/* ---------- he olvidado mi contraseña ---------- */
+
+// Dirección a la que vuelve el enlace del correo (la de la app, sin «index.html»)
+const appUrl = () => location.origin + location.pathname.replace(/index\.html$/, '');
+
+SHEETS.forgot = {
+  title: () => 'Recuperar la contraseña',
+  render: (s) => s.sent ? `
+    <p>Si hay una cuenta con <strong>${esc(s.email)}</strong>, te llegará un correo con un enlace en unos minutos. Mira también en «Correo no deseado».</p>
+    <p class="top-gap">Abre el enlace y elige una contraseña nueva. Caduca en una hora y solo vale una vez.</p>
+    <p class="hint">En el iPhone el enlace se abre en Safari: cambia allí la contraseña y después entra con ella en la app de la pantalla de inicio.</p>
+    <div class="sheet-actions"><button type="button" class="btn primary" data-act="sheet-back-or-close">Entendido</button></div>` : `
+    <p class="muted">Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva. Tus datos no se tocan.</p>
+    <form data-form="sync-forgot" class="top-gap" novalidate>
+      <label class="field"><span>Correo</span><input id="fg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(s.email || '')}" required></label>
+      ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Enviando…' : 'Enviar enlace'}</button>
+      </div>
+    </form>`,
+};
+
+async function doForgot(top) {
+  const email = ($('#fg-email')?.value || '').trim().toLowerCase();
+  top.email = email;
+  if (!/^\S+@\S+\.\S+$/.test(email)) { top.error = 'Ese correo no parece válido.'; renderSheets(); return; }
+  top.error = '';
+  top.busy = true;
+  renderSheets();
+  try {
+    await apiCall('/auth/v1/recover?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email } });
+    top.sent = true;
+  } catch (e) {
+    top.error = explain(e);
+  }
+  top.busy = false;
+  renderSheets();
+}
+
+// El enlace del correo vuelve a la app con una sesión de recuperación tras «#».
+// Se lee y se quita de la dirección enseguida, para que no quede en el historial. No se guarda en ningún sitio.
+// Con la plantilla de correo recomendada llega solo un código de un uso (token_hash), que se canjea al guardar.
+// Con la plantilla de Supabase por defecto llega ya una sesión (access_token): se cierra si se abandona la hoja.
+export function takeRecoveryLink() {
+  const link = typeof location === 'undefined' ? null : parseAuthLink(location.hash);
+  if (!link) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* sin historial */ }
+  return link.rec;
+}
+const recSheets = new Set();
+const dropRecovery = (token) => { if (token) apiCall('/auth/v1/logout?scope=local', { method: 'POST', token }).catch(() => {}); };
+export function openRecovery(rec) {
+  if (!rec) return;
+  const sheet = { type: 'newpass', ...rec };
+  recSheets.add(sheet);
+  pushSheet(sheet);
+}
+// Hoja cerrada sin terminar: la sesión de recuperación que tuviera no se deja viva
+HOOKS.sheetChange.push(() => {
+  for (const sh of recSheets) if (!S.sheets.includes(sh)) { dropRecovery(sh.token); sh.token = null; recSheets.delete(sh); }
+});
+
+SHEETS.newpass = {
+  title: (s) => (s.linkError ? 'Enlace caducado' : 'Contraseña nueva'),
+  render: (s) => {
+    if (s.linkError) return `
+    <p>Este enlace ya no vale: ha caducado o ya se ha usado.</p>
+    <p class="top-gap">Pide otro y ábrelo en cuanto te llegue.</p>
+    <div class="sheet-actions"><button type="button" class="btn primary" data-act="sync-forgot">Pedir otro enlace</button></div>`;
+    if (s.done) return `
+    <p><strong>Contraseña cambiada.</strong> Ya puedes entrar con ella${s.email ? ` (${esc(s.email)})` : ''}.</p>
+    <p class="hint">Si usas la app instalada en la pantalla de inicio del iPhone, ábrela y entra allí con la contraseña nueva. Por seguridad, en tus otros dispositivos te pedirá volver a entrar: no se pierde nada de lo que tengas en ellos.</p>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost" data-act="sheet-back-or-close">Cerrar</button>
+      ${auth ? '' : '<button type="button" class="btn primary" data-act="sync-newpass-login">Entrar</button>'}
+    </div>`;
+    return `
+    <p class="muted">Elige una contraseña nueva para tu cuenta. Al menos 6 caracteres (mejor 8 o más, con letras y números).</p>
+    <form data-form="sync-newpass" class="top-gap" novalidate>
+      <label class="field"><span>Contraseña nueva</span><input id="np-pass" type="password" autocomplete="new-password" minlength="6" required></label>
+      <label class="field"><span>Repítela</span><input id="np-pass2" type="password" autocomplete="new-password" minlength="6" required></label>
+      ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary" ${s.busy ? 'disabled' : ''}>${s.busy ? 'Guardando…' : 'Guardar contraseña'}</button>
+      </div>
+    </form>`;
+  },
+};
+
+async function doNewPass(top) {
+  const password = $('#np-pass')?.value || '';
+  const again = $('#np-pass2')?.value || '';
+  if (password.length < 6) { top.error = 'La contraseña tiene que tener al menos 6 caracteres.'; renderSheets(); return; }
+  if (password !== again) { top.error = 'Las dos contraseñas no coinciden.'; renderSheets(); return; }
+  top.error = '';
+  top.busy = true;
+  renderSheets();
+  try {
+    if (!top.token && top.hash) {
+      // Se canjea el código del correo por una sesión de recuperación (solo vale una vez)
+      const ses = await apiCall('/auth/v1/verify', { method: 'POST', body: { type: 'recovery', token_hash: top.hash } });
+      top.hash = null;
+      top.token = ses?.access_token || null;
+    }
+    const user = await apiCall('/auth/v1/user', { method: 'PUT', token: top.token, body: { password } });
+    // La sesión de recuperación ya no hace falta: se cierra
+    dropRecovery(top.token);
+    top.token = null;
+    top.email = user?.email || '';
+    top.done = true;
+    // Si este dispositivo tenía abierta esa misma cuenta, el servidor la ha cerrado: se olvida la sesión, no los datos
+    if (auth && user?.id && auth.user.id === user.id) { await endSession(); render(); }
+  } catch (e) {
+    if (e.status === 401 || e.status === 403 || /otp_expired|bad_jwt|session_not_found|session_expired/i.test(e.code)) {
+      dropRecovery(top.token); top.token = null; top.hash = null; top.linkError = e.code || 'expired';
+    } else top.error = explain(e);
+  }
+  top.busy = false;
+  renderSheets();
+}
 
 // Las fotos sin dueño (de versiones anteriores) pasan a ser de esta cuenta
 async function claimPhotos(uid) {
@@ -493,9 +626,13 @@ async function doLogin(top, mode) {
 }
 
 FORMS['sync-login'] = (form, top) => doLogin(top, 'login');
+FORMS['sync-forgot'] = (form, top) => doForgot(top);
+FORMS['sync-newpass'] = (form, top) => doNewPass(top);
 
 Object.assign(ACTIONS, {
   'sync-login': () => pushSheet({ type: 'login', mode: 'login' }),
+  'sync-forgot': (el, top) => pushSheet({ type: 'forgot', email: top?.type === 'login' ? ($('#lg-email')?.value || '').trim() : '' }),
+  'sync-newpass-login': (el, top) => { const email = top?.email || ''; popSheet(); pushSheet({ type: 'login', mode: 'login', email }); },
   'sync-signup': (el, top) => doLogin(top, 'signup'),
   'sync-now': () => syncNow({ quiet: false }),
   'sync-logout': () => pushSheet({
