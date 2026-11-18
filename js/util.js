@@ -27,7 +27,7 @@ export const HEALTH_CONSENT_TEXT = 'Consiento expresamente que Fitness trate mis
 // Los que faltan, a partir de lo que devuelve el servidor (my_consents)
 export function missingConsents(rows, need = CONSENTS) {
   const list = Array.isArray(rows) ? rows : [];
-  return Object.keys(need).filter((k) => !list.some((r) => r && r.kind === k && Number(r.version) >= need[k]));
+  return Object.keys(need).filter((k) => !list.some((r) => r && r.kind === k && Number(r.version) === need[k]));
 }
 
 // Lo que trae tras «#» un enlace de los correos de Supabase. Devuelve null si no es un enlace de cuenta.

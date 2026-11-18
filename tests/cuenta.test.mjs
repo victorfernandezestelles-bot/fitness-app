@@ -49,3 +49,7 @@ test('una versión anterior del texto no vale: se vuelve a pedir', () => {
 test('un consentimiento de otro tipo no cuenta', () => {
   assert.deepEqual(missingConsents([{ kind: 'terms', version: 1 }]), ['health']);
 });
+
+test('un consentimiento a un texto que aún no existe no vale', () => {
+  assert.deepEqual(missingConsents([{ kind: 'health', version: 1000 }], { health: 1 }), ['health']);
+});

@@ -17,6 +17,7 @@ let inbox = null;        // notas visibles y propuesta pendiente de su entrenado
 let readOnlyChosen = false;
 let gateEl = null;
 let bannerEl = null;
+let gateShown = '';
 
 export const myProfile = () => profile;
 export const isDev = () => accessState() === 'active' && profile?.role === 'dev';
@@ -55,6 +56,7 @@ export const dateNum = (s) => new Date(s).toLocaleDateString('es-ES', { day: '2-
 
 GUARD.canWrite = () => accessState() === 'active';
 SYNC_HOOKS.canPush = () => accessState() === 'active';
+SYNC_HOOKS.state = () => accessState();
 
 /* ---------- servidor ---------- */
 
@@ -86,6 +88,7 @@ const ERRORS = {
   too_big: 'Es demasiado grande para guardarlo.',
   rate_limit: 'Has hecho demasiados intentos hoy. Prueba mañana.',
   bad_consent: 'No se ha podido guardar el consentimiento. Prueba de nuevo.',
+  no_consent: 'Falta tu consentimiento para tratar tus datos de salud.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
@@ -144,12 +147,16 @@ async function refreshInbox(p = profile) {
   try { if (inbox) await store.put('sync:inbox', inbox); else await store.del('sync:inbox'); } catch (e) { /* sin almacén */ }
 }
 
+let consentAsk = 0;
 async function refreshConsents() {
+  const n = ++consentAsk;
   try {
     const list = await rpc('my_consents');
+    if (n !== consentAsk) return; // llegó otra respuesta más nueva
     consents = Array.isArray(list) ? list : null;
   } catch (e) {
     // Sin el 010 en el servidor no se pide nada; sin conexión se sigue con lo último que se supo
+    if (n !== consentAsk) return;
     if (e?.status === 404 || /PGRST202|could not find the function/i.test(String(e?.code) + ' ' + String(e?.message))) consents = null;
     else return;
   }
@@ -221,7 +228,11 @@ function applyAccess() {
     document.body.appendChild(bannerEl);
   }
   gateEl.hidden = !closed || readOnlyChosen;
-  if (!gateEl.hidden) gateEl.innerHTML = gateHTML(st);
+  // Solo se reescribe si cambia: así no se pierde lo marcado o escrito en ella al sincronizar
+  if (!gateEl.hidden) {
+    const html = gateHTML(st);
+    if (html !== gateShown) { gateEl.innerHTML = html; gateShown = html; }
+  } else gateShown = '';
   bannerEl.hidden = !(closed && readOnlyChosen);
   const why = { consent: 'falta tu consentimiento', blocked: 'acceso pausado', paused: 'pausado por tu entrenador', pending: profile?.role === 'client' ? 'sin entrenador' : 'cuenta sin activar', guest: 'sin sesión' }[st];
   if (!bannerEl.hidden) bannerEl.innerHTML = `<span>Solo lectura · ${why}</span><button type="button" class="btn small" data-act="acct-gate">Opciones</button>`;
@@ -298,7 +309,7 @@ function gateHTML(st) {
       <h1>Fitness</h1>
       <p>Entra con tu cuenta para usar la app. Si es tu primera vez, créala con tu correo.</p>
       <button type="button" class="btn wide" data-act="sync-login">Entrar o crear cuenta</button>
-      ${hasLocalData() ? `<p class="gate-note">Tienes datos guardados en este dispositivo. Al entrar se juntan con los de tu cuenta.</p>${common}` : ''}`;
+      ${hasLocalData() ? `<p class="gate-note">Tienes datos guardados en este dispositivo sin cuenta. Al entrar se borran del teléfono para que no se mezclen con los de tu cuenta: si los quieres, descárgalos antes.</p>${common}` : ''}`;
   } else if (st === 'pending') {
     const noTrainer = profile?.role === 'client' || profile?.link_last;
     body = `
@@ -365,7 +376,7 @@ export function accountCard() {
     ${p?.request?.status === 'pending' ? `<p class="hint">Solicitud para ser entrenador enviada el ${dateShort(localDay(p.request.created_at))}: pendiente de revisar.</p>` : ''}
     ${p?.request?.status === 'rejected' && canAsk ? `<p class="hint">Tu última solicitud para ser entrenador no se aprobó${p.request.reply ? `: «${esc(p.request.reply)}»` : '.'}</p>` : ''}
     ${canAsk ? '<button type="button" class="btn ghost wide top-gap" data-act="acct-request">Soy entrenador: solicitar acceso</button>' : ''}
-    <p class="hint">Se sincroniza todo menos las fotos y los ajustes de apariencia. Los datos se guardan en un servidor de la UE (Irlanda) y solo tu cuenta puede leerlos.</p>
+    <p class="hint">Se sincroniza todo menos las fotos y los ajustes de apariencia. Los datos se guardan en un servidor de la UE (Irlanda) y solo los lee tu cuenta y, si te vinculas, tu entrenador en solo lectura.</p>
     ${consentDate() ? `<p class="hint">Diste tu consentimiento para tratar tus datos de salud el ${dateNum(consentDate())}. Para retirarlo, borra tu cuenta: la app no puede funcionar sin esos datos.</p>` : ''}
     <button type="button" class="link tap-link" data-act="acct-privacy">Cómo tratamos tus datos</button>
     <button type="button" class="link danger-link top-gap" data-act="acct-delete">Borrar mi cuenta y mis datos</button>
@@ -455,11 +466,12 @@ SHEETS['privacy-info'] = {
       <li>Tu correo, tu nombre y tu contraseña (cifrada).</li>
       <li>Lo que apuntas: comidas, pasos, peso, sueño, medidas, entrenos, cardio y objetivos.</li>
       <li>Tus fotos se quedan en tu teléfono. Solo salen las sesiones que compartes con tu entrenador.</li>
+      <li>Si compartes un producto escaneado, su nombre y sus valores los ven todos los usuarios; quién lo añadió solo lo ve el equipo de la app.</li>
     </ul>
     <h3 class="sub-title">Dónde</h3>
-    <p>En tu teléfono y en un servidor de la UE (Irlanda) de Supabase. Al escanear un código de barras, el código se consulta en Open Food Facts (Francia), sin tu cuenta.</p>
+    <p>En tu teléfono y en un servidor de la UE (Irlanda) de Supabase. Al escanear un código o buscar un alimento por su nombre, lo que buscas se consulta en Open Food Facts (Francia), sin tu cuenta.</p>
     <h3 class="sub-title">Quién los ve</h3>
-    <p>Solo tu cuenta. Si te vinculas con un entrenador, él ve en solo lectura lo que aceptaste al vincularte; nunca tus alimentos propios ni tus recetas.</p>
+    <p>Solo tu cuenta. Si te vinculas con un entrenador, él ve en solo lectura lo que aceptaste al vincularte: tu diario (comidas, pasos y sueño), entrenos, rutinas, cardio, peso, medidas, objetivos y tus datos de sexo, edad, altura y actividad. Nunca tus alimentos propios ni tus recetas.</p>
     <h3 class="sub-title">Tus derechos</h3>
     <ul class="consent-list">
       <li>Descargarlos: Ajustes › Tus datos.</li>
@@ -477,7 +489,8 @@ SHEETS['link-consent'] = {
     <p>Vas a enviar una solicitud a <b>${esc(s.name)}</b>. Cuando la acepte:</p>
     <ul class="consent-list">
       <li>Verá tu nombre y tu correo.</li>
-      <li>Podrá ver (sin cambiarlos) tu diario de comidas, tus entrenamientos, tu peso, tus medidas y tus objetivos.</li>
+      <li>Podrá ver (sin cambiarlos) tu diario de comidas con tus pasos y tu sueño, tus entrenamientos y rutinas, tu cardio, tu peso, tus medidas, tus objetivos y tus datos de sexo, año de nacimiento, altura y actividad.</li>
+      <li>No verá tus alimentos propios ni tus recetas.</li>
       <li>No verá tus fotos, salvo que tú decidas compartirlas.</li>
       <li>Podrá pausar tu acceso a la app o desvincularte. Tú puedes desvincularte cuando quieras.</li>
     </ul>
@@ -594,12 +607,21 @@ FORMS['acct-delete'] = async (form, top) => {
 
 Object.assign(ACTIONS, {
   'acct-readonly': () => { readOnlyChosen = true; applyAccess(); render(); },
-  'acct-privacy': () => pushSheet({ type: 'privacy-info' }),
+  'acct-privacy': (el, top) => {
+    if (top?.type === 'login') {
+      top.email = ($('#lg-email')?.value || '').trim();
+      top.name = ($('#lg-name')?.value || '').trim();
+      top.pw = $('#lg-pass')?.value || '';
+      top.consent = !!$('#lg-consent')?.checked;
+    }
+    pushSheet({ type: 'privacy-info' });
+  },
   'acct-gate': () => { readOnlyChosen = false; applyAccess(); },
   'acct-refresh': async () => {
     const err = await refreshProfile();
     if (err) { toast('No se ha podido comprobar: ' + errorText(err)); return; }
-    toast(accessState() === 'active' ? 'Tu cuenta está activa' : `Sigue igual (${currentUser()?.email || ''}: ${ROLE_NAME[profile?.role] || 'sin perfil'})`);
+    const st = accessState();
+    toast(st === 'active' ? 'Tu cuenta está activa' : st === 'consent' ? 'Falta tu consentimiento para tratar tus datos de salud: marca la casilla y pulsa «Aceptar y continuar».' : `Sigue igual (${currentUser()?.email || ''}: ${ROLE_NAME[profile?.role] || 'sin perfil'})`);
     if (accessState() === 'active') { render(); maybeOnboard(); }
   },
   'acct-request': () => pushSheet({ type: 'trainer-request' }),

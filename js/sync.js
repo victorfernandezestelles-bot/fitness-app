@@ -28,7 +28,7 @@ let again = false;
 let timer = null;
 export const syncState = { status: 'off', at: null, msg: '' };
 // Enganches para la cuenta: al entrar o salir, al empezar cada sincronización, y si se puede subir
-export const SYNC_HOOKS = { auth: [], cycle: [], canPush: () => true };
+export const SYNC_HOOKS = { auth: [], cycle: [], canPush: () => true, state: () => 'active' };
 export const isLoggedIn = () => !!auth;
 export const currentUser = () => auth?.user || null;
 export const rpc = (name, args = {}) => apiRest('rpc/' + name, { method: 'POST', body: args });
@@ -431,7 +431,8 @@ SHEETS.login = {
       <label class="field"><span>Correo</span><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(s.email || '')}" required></label>
       <label class="field"><span>Tu nombre <small class="muted">(solo al crear la cuenta)</small></span><input id="lg-name" type="text" autocomplete="name" value="${esc(s.name || '')}" maxlength="60"></label>
       <label class="field"><span>Contraseña</span><input id="lg-pass" type="password" autocomplete="${s.mode === 'signup' ? 'new-password' : 'current-password'}" minlength="6" value="${esc(s.pw || '')}" required></label>
-      <label class="check consent-check"><input type="checkbox" id="lg-consent" ${s.consent ? 'checked' : ''}> <span><small class="muted">Solo al crear la cuenta:</small> ${esc(HEALTH_CONSENT_TEXT)} <button type="button" class="link" data-act="acct-privacy">Cómo tratamos tus datos</button></span></label>
+      <label class="check consent-check"><input type="checkbox" id="lg-consent" ${s.consent ? 'checked' : ''}> <span><small class="muted">Obligatorio al crear la cuenta:</small> ${esc(HEALTH_CONSENT_TEXT)}</span></label>
+      <p><button type="button" class="link tap-link" data-act="acct-privacy">Cómo tratamos tus datos</button></p>
       ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
       <p><button type="button" class="link tap-link" data-act="sync-forgot">He olvidado mi contraseña</button></p>
       <div class="sheet-actions">
@@ -616,8 +617,9 @@ async function doLogin(top, mode) {
     setSession(res);
     await saveAuth();
     await store.put(OWNER, auth.user.id);
-    // El consentimiento marcado al crear la cuenta se guarda en el servidor con su fecha. Si falla, la app lo pedirá de nuevo.
-    if (mode === 'signup') {
+    // El consentimiento marcado se guarda en el servidor con su fecha (al crear la cuenta es obligatorio;
+    // al entrar, si se marca, también vale). Si falla, la app lo pedirá de nuevo.
+    if (top.consent) {
       for (const [kind, version] of Object.entries(CONSENTS)) {
         try { await rpc('give_consent', { p_kind: kind, p_version: version }); } catch (e) { /* se volverá a pedir */ }
       }
@@ -671,7 +673,9 @@ Object.assign(ACTIONS, {
       const inactive = !SYNC_HOOKS.canPush();
       pushSheet({
         type: 'confirm', title: 'Hay cambios sin subir', ok: 'Cerrar sesión y perderlos', danger: true,
-        text: inactive
+        text: SYNC_HOOKS.state() === 'consent'
+          ? `Hay ${cambios(n)} en tu cuenta que no se pueden subir hasta que des tu consentimiento para tratar tus datos de salud (pantalla «Antes de seguir»). Si cierras sesión ahora, se perderán.`
+          : inactive
           ? `Hay ${cambios(n)} en tu cuenta y, como tu cuenta no está activa, no se pueden subir. Si cierras sesión se perderán. Antes, guarda una copia en Ajustes › Tus datos.`
           : `Hay ${cambios(n)} en tu cuenta (puede que no haya conexión). Si cierras sesión ahora, se perderán. Mejor espera a tener conexión y vuelve a intentarlo.`,
         onOk: () => logoutAndWipe({ lost: true }),
