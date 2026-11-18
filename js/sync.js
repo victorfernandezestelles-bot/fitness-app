@@ -5,7 +5,7 @@
 // ahí se juntan las comidas de los dos.
 import * as store from './store.js';
 import { SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { $, cleanData, esc, isDate, parseAuthLink, plain, uid } from './util.js';
+import { $, CONSENTS, HEALTH_CONSENT_TEXT, cleanData, esc, isDate, parseAuthLink, plain, uid } from './util.js';
 import { S, SAVED, SCHEMA, flushAll, mergeSettings, migrate, saveActivities, saveDay, saveExercises, saveFoods, saveMeasures, saveRecipes, saveRoutines, saveSettings, saveWeights, saveWorkout, wipeAll } from './state.js';
 import { ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
 import { keepAwake } from './training.js';
@@ -431,6 +431,7 @@ SHEETS.login = {
       <label class="field"><span>Correo</span><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(s.email || '')}" required></label>
       <label class="field"><span>Tu nombre <small class="muted">(solo al crear la cuenta)</small></span><input id="lg-name" type="text" autocomplete="name" value="${esc(s.name || '')}" maxlength="60"></label>
       <label class="field"><span>Contraseña</span><input id="lg-pass" type="password" autocomplete="${s.mode === 'signup' ? 'new-password' : 'current-password'}" minlength="6" value="${esc(s.pw || '')}" required></label>
+      <label class="check consent-check"><input type="checkbox" id="lg-consent" ${s.consent ? 'checked' : ''}> <span><small class="muted">Solo al crear la cuenta:</small> ${esc(HEALTH_CONSENT_TEXT)} <button type="button" class="link" data-act="acct-privacy">Cómo tratamos tus datos</button></span></label>
       ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
       <p><button type="button" class="link tap-link" data-act="sync-forgot">He olvidado mi contraseña</button></p>
       <div class="sheet-actions">
@@ -592,7 +593,9 @@ async function doLogin(top, mode) {
   top.name = ($('#lg-name')?.value || '').trim();
   top.pw = password; // solo mientras la hoja está abierta, para no tener que volver a escribirla
   top.mode = mode;
+  top.consent = !!$('#lg-consent')?.checked;
   if (!/^\S+@\S+\.\S+$/.test(email)) { top.error = 'Ese correo no parece válido.'; renderSheets(); return; }
+  if (mode === 'signup' && !top.consent) { top.error = 'Para crear la cuenta tienes que marcar la casilla del consentimiento: sin tratar esos datos la app no puede funcionar.'; renderSheets(); return; }
   if (password.length < 6) { top.error = 'La contraseña tiene que tener al menos 6 caracteres.'; renderSheets(); return; }
   top.error = '';
   top.busy = true;
@@ -613,6 +616,12 @@ async function doLogin(top, mode) {
     setSession(res);
     await saveAuth();
     await store.put(OWNER, auth.user.id);
+    // El consentimiento marcado al crear la cuenta se guarda en el servidor con su fecha. Si falla, la app lo pedirá de nuevo.
+    if (mode === 'signup') {
+      for (const [kind, version] of Object.entries(CONSENTS)) {
+        try { await rpc('give_consent', { p_kind: kind, p_version: version }); } catch (e) { /* se volverá a pedir */ }
+      }
+    }
     popSheet();
     for (const fn of SYNC_HOOKS.auth) await fn(true);
     render();

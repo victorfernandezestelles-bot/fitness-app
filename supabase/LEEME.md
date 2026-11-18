@@ -15,6 +15,7 @@ Archivos SQL para ejecutar en **SQL Editor** de Supabase, en orden. Cada uno se 
 | `007-fotos.sql` | Fase 6: el cliente comparte con su entrenador las sesiones de fotos que quiera; se borran al terminar el vínculo (ya ejecutado) |
 | `008-alimentos-compartidos.sql` | Fase 7: base de alimentos de la app con los productos escaneados que no están en Open Food Facts, avisos de error y moderación (ya ejecutado) |
 | `009-seguridad.sql` | Revisión de seguridad: las fotos compartidas solo pueden ser imágenes, la unidad de un alimento compartido no admite `< > " &`, un entrenador bloqueado deja de ver a sus clientes y no puede desvincularlos, una cuenta bloqueada no puede compartir fotos ni cambiar datos de su perfil, límites de tamaño (256 KB por dato y 20.000 datos por cuenta, 60 fotos compartidas por cliente, 30 alimentos nuevos al día, 10 solicitudes de vínculo al día, 500 notas por cliente y 50 propuestas cada 30 días), 15 días de plazo si se borra un entrenador desde el panel, el correo del entrenador ya no se enseña al cliente y códigos `FIT-`/`ENT-` con azar criptográfico |
+| `010-consentimientos.sql` | Guarda cuándo da cada usuario su consentimiento explícito para tratar sus datos de salud y en qué versión del texto (tabla `consents`, funciones `give_consent` y `my_consents`). Cada consentimiento es una fila que no se cambia. No redefine nada anterior. Sin este archivo, la app no pide el consentimiento a las cuentas que ya existían |
 
 ## Hacer desarrollador una cuenta
 

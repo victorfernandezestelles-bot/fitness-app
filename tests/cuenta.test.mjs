@@ -1,4 +1,4 @@
-// «He olvidado mi contraseña»: qué hace la app con lo que trae tras «#» un enlace de los correos de Supabase.
+// Cuenta: enlaces de los correos de Supabase («He olvidado mi contraseña») y consentimientos.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -27,4 +27,25 @@ test('un enlace caducado avisa', () => {
 test('otros enlaces de cuenta se quitan de la dirección sin abrir ninguna hoja', () => {
   assert.deepEqual(parseAuthLink('#access_token=xyz&refresh_token=r1&type=magiclink'), { strip: true, rec: null });
   assert.deepEqual(parseAuthLink('#token_hash=abc&type=signup'), { strip: true, rec: null });
+});
+
+// Consentimiento de datos de salud: qué falta según lo que devuelve el servidor
+const { missingConsents, CONSENTS } = await import('../js/util.js');
+
+test('sin consentimientos falta el de salud', () => {
+  assert.deepEqual(missingConsents([]), ['health']);
+  assert.deepEqual(missingConsents(null), ['health']);
+});
+
+test('con el de salud en la versión vigente no falta nada', () => {
+  assert.deepEqual(missingConsents([{ kind: 'health', version: CONSENTS.health, given_at: '2026-11-18T10:00:00Z' }]), []);
+});
+
+test('una versión anterior del texto no vale: se vuelve a pedir', () => {
+  assert.deepEqual(missingConsents([{ kind: 'health', version: 1 }], { health: 2 }), ['health']);
+  assert.deepEqual(missingConsents([{ kind: 'health', version: 1 }, { kind: 'health', version: 2 }], { health: 2 }), []);
+});
+
+test('un consentimiento de otro tipo no cuenta', () => {
+  assert.deepEqual(missingConsents([{ kind: 'terms', version: 1 }]), ['health']);
 });

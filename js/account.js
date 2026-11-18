@@ -2,7 +2,7 @@
 // vínculo con un entrenador, solicitud para ser entrenador, modo solo lectura y borrado de la cuenta.
 // Lo que decide quién puede qué está en el servidor (supabase/002 y 003); aquí solo se refleja.
 import * as store from './store.js';
-import { $, dateShort, esc, localDay } from './util.js';
+import { $, CONSENTS, HEALTH_CONSENT_TEXT, dateShort, esc, localDay, missingConsents } from './util.js';
 import { GUARD, S, SAVED, saveSettings, wipeAll } from './state.js';
 import { GOAL_FIELDS } from './derived.js';
 import { ACCESS, ACTIONS, FORMS, HOOKS, SHEETS, applyTheme, closeSheets, popSheet, pushSheet, render, renderSheets, toast } from './ui.js';
@@ -12,6 +12,7 @@ import { SYNC_HOOKS, currentUser, currentUserId, isLoggedIn, rpc, signOutLocal, 
 export const ROLE_NAME = { dev: 'Desarrollador', trainer: 'Entrenador', client: 'Cliente', free: 'Usuario libre', pending: 'Pendiente de activar' };
 
 let profile = null;      // el último perfil que dio el servidor (se guarda para poder abrir sin conexión)
+let consents = null;     // consentimientos que constan en el servidor; null = no se sabe (sin conexión o sin el 010)
 let inbox = null;        // notas visibles y propuesta pendiente de su entrenador
 let readOnlyChosen = false;
 let gateEl = null;
@@ -20,9 +21,18 @@ let bannerEl = null;
 export const myProfile = () => profile;
 export const isDev = () => accessState() === 'active' && profile?.role === 'dev';
 
+// Falta un consentimiento que el servidor confirma que no se ha dado (si no se sabe, no se bloquea)
+const needsConsent = () => isLoggedIn() && Array.isArray(consents) && missingConsents(consents).length > 0;
+export const consentDate = (kind = 'health') => (Array.isArray(consents) ? consents.filter((c) => c.kind === kind).map((c) => c.given_at).sort().pop() : null) || null;
+
 // guest: sin sesión · pending (también «sin entrenador») · blocked (por el equipo de la app) ·
-// paused (por su entrenador) · active. Sin servidor configurado, o sin perfil todavía, la app sigue abierta.
+// paused (por su entrenador) · consent (cuenta activa sin el consentimiento de datos de salud) · active.
+// Sin servidor configurado, o sin perfil todavía, la app sigue abierta.
 export function accessState() {
+  const st = baseState();
+  return st === 'active' && needsConsent() ? 'consent' : st;
+}
+function baseState() {
   if (!syncConfigured()) return 'active';
   if (!isLoggedIn()) return 'guest';
   if (!profile) return 'active';
@@ -75,6 +85,7 @@ const ERRORS = {
   too_many: 'Has llegado al máximo permitido. Borra algo antes de añadir más.',
   too_big: 'Es demasiado grande para guardarlo.',
   rate_limit: 'Has hecho demasiados intentos hoy. Prueba mañana.',
+  bad_consent: 'No se ha podido guardar el consentimiento. Prueba de nuevo.',
 };
 export function errorText(e) {
   if (e?.code === 'offline') return 'No hay conexión. Prueba de nuevo cuando la tengas.';
@@ -84,10 +95,9 @@ export function errorText(e) {
 }
 
 // Lo del perfil que se ve en las pestañas (Hoy, Ajustes, Clientes)
-const shown = (p) => JSON.stringify(p ? [p.role, p.name, p.link, p.link_request, p.link_last, p.coaching, p.trainer_code, p.request, inbox] : null);
+const shown = (p) => JSON.stringify(p ? [p.role, p.name, p.link, p.link_request, p.link_last, p.coaching, p.trainer_code, p.request, inbox, consentDate()] : null);
 
-async function setProfile(p, was = shown(profile)) {
-  const before = accessState();
+async function setProfile(p, was = shown(profile), before = accessState()) {
   profile = p || null;
   try { if (profile) await store.put('sync:profile', profile); else await store.del('sync:profile'); } catch (e) { /* sin almacén */ }
   applyAccess();
@@ -112,10 +122,12 @@ export async function refreshProfile() {
   try {
     const p = await rpc('my_profile');
     if (!p) return { message: 'no_profile' };
-    // La bandeja va antes que el perfil para que la pantalla se pinte ya con ella
+    // La bandeja y los consentimientos van antes que el perfil para que la pantalla se pinte ya con ellos
     const was = shown(profile);
+    const before = accessState();
     await refreshInbox(p);
-    await setProfile(p, was);
+    await refreshConsents();
+    await setProfile(p, was, before);
     return null;
   } catch (e) {
     // Se sigue con el último perfil guardado
@@ -130,6 +142,18 @@ async function refreshInbox(p = profile) {
   }
   inbox = next;
   try { if (inbox) await store.put('sync:inbox', inbox); else await store.del('sync:inbox'); } catch (e) { /* sin almacén */ }
+}
+
+async function refreshConsents() {
+  try {
+    const list = await rpc('my_consents');
+    consents = Array.isArray(list) ? list : null;
+  } catch (e) {
+    // Sin el 010 en el servidor no se pide nada; sin conexión se sigue con lo último que se supo
+    if (e?.status === 404 || /PGRST202|could not find the function/i.test(String(e?.code) + ' ' + String(e?.message))) consents = null;
+    else return;
+  }
+  try { if (consents) await store.put('sync:consents', consents); else await store.del('sync:consents'); } catch (e) { /* sin almacén */ }
 }
 
 export const coachInbox = () => inbox;
@@ -164,12 +188,13 @@ SYNC_HOOKS.auth.push(async (inSession) => {
   else await setProfile(null);
   if (inSession && accessState() === 'active') maybeOnboard();
 });
-SAVED.push((key) => { if (key === '!wipe') { profile = null; inbox = null; readOnlyChosen = false; applyAccess(); } });
+SAVED.push((key) => { if (key === '!wipe') { profile = null; inbox = null; consents = null; readOnlyChosen = false; applyAccess(); } });
 
 export async function initAccount() {
   if (!syncConfigured()) return;
   try { profile = (await store.get('sync:profile')) || null; } catch (e) { profile = null; }
   try { inbox = (await store.get('sync:inbox')) || null; } catch (e) { inbox = null; }
+  try { consents = (await store.get('sync:consents')) || null; } catch (e) { consents = null; }
   applyAccess();
   refreshProfile();
 }
@@ -198,7 +223,7 @@ function applyAccess() {
   gateEl.hidden = !closed || readOnlyChosen;
   if (!gateEl.hidden) gateEl.innerHTML = gateHTML(st);
   bannerEl.hidden = !(closed && readOnlyChosen);
-  const why = { blocked: 'acceso pausado', paused: 'pausado por tu entrenador', pending: profile?.role === 'client' ? 'sin entrenador' : 'cuenta sin activar', guest: 'sin sesión' }[st];
+  const why = { consent: 'falta tu consentimiento', blocked: 'acceso pausado', paused: 'pausado por tu entrenador', pending: profile?.role === 'client' ? 'sin entrenador' : 'cuenta sin activar', guest: 'sin sesión' }[st];
   if (!bannerEl.hidden) bannerEl.innerHTML = `<span>Solo lectura · ${why}</span><button type="button" class="btn small" data-act="acct-gate">Opciones</button>`;
   document.body.classList.toggle('gated', !gateEl.hidden);
 }
@@ -257,7 +282,18 @@ function gateHTML(st) {
     <button type="button" class="btn ghost wide" data-act="acct-readonly">Ver mis datos (solo lectura)</button>
     <button type="button" class="btn ghost wide" data-act="export-json">Descargar mis datos (.json)</button>`;
   let body = '';
-  if (st === 'guest') {
+  if (st === 'consent') {
+    body = `
+      <h1>Antes de seguir</h1>
+      <p>Fitness guarda datos de salud: tu peso, tus medidas, lo que comes, cómo duermes, tus entrenos y tus fotos. Para tratarlos necesitamos tu consentimiento expreso.</p>
+      <form data-form="acct-consent" novalidate>
+        <label class="check consent-check"><input type="checkbox" id="cs-health"> <span>${esc(HEALTH_CONSENT_TEXT)}</span></label>
+        <button type="submit" class="btn wide top-gap">Aceptar y continuar</button>
+      </form>
+      <button type="button" class="link tap-link" data-act="acct-privacy">Cómo tratamos tus datos</button>
+      <p class="gate-note">Si no quieres darlo, puedes ver y descargar tus datos o borrar tu cuenta. Mientras tanto no se sube nada nuevo al servidor.</p>
+      ${common}`;
+  } else if (st === 'guest') {
     body = `
       <h1>Fitness</h1>
       <p>Entra con tu cuenta para usar la app. Si es tu primera vez, créala con tu correo.</p>
@@ -330,6 +366,8 @@ export function accountCard() {
     ${p?.request?.status === 'rejected' && canAsk ? `<p class="hint">Tu última solicitud para ser entrenador no se aprobó${p.request.reply ? `: «${esc(p.request.reply)}»` : '.'}</p>` : ''}
     ${canAsk ? '<button type="button" class="btn ghost wide top-gap" data-act="acct-request">Soy entrenador: solicitar acceso</button>' : ''}
     <p class="hint">Se sincroniza todo menos las fotos y los ajustes de apariencia. Los datos se guardan en un servidor de la UE (Irlanda) y solo tu cuenta puede leerlos.</p>
+    ${consentDate() ? `<p class="hint">Diste tu consentimiento para tratar tus datos de salud el ${dateNum(consentDate())}. Para retirarlo, borra tu cuenta: la app no puede funcionar sin esos datos.</p>` : ''}
+    <button type="button" class="link tap-link" data-act="acct-privacy">Cómo tratamos tus datos</button>
     <button type="button" class="link danger-link top-gap" data-act="acct-delete">Borrar mi cuenta y mis datos</button>
   </section>`;
 }
@@ -407,6 +445,30 @@ SHEETS['coach-proposal'] = {
   },
 };
 
+// Resumen de cómo se tratan los datos. Describe lo que hace la app hoy; el texto legal completo está en revisión.
+SHEETS['privacy-info'] = {
+  title: () => 'Cómo tratamos tus datos',
+  render: () => `
+    <p><b>Tus datos de salud son tuyos.</b> Solo se usan para que tú los veas y, si lo decides, tu entrenador. Nunca se venden ni se usan para publicidad.</p>
+    <h3 class="sub-title">Qué se guarda</h3>
+    <ul class="consent-list">
+      <li>Tu correo, tu nombre y tu contraseña (cifrada).</li>
+      <li>Lo que apuntas: comidas, pasos, peso, sueño, medidas, entrenos, cardio y objetivos.</li>
+      <li>Tus fotos se quedan en tu teléfono. Solo salen las sesiones que compartes con tu entrenador.</li>
+    </ul>
+    <h3 class="sub-title">Dónde</h3>
+    <p>En tu teléfono y en un servidor de la UE (Irlanda) de Supabase. Al escanear un código de barras, el código se consulta en Open Food Facts (Francia), sin tu cuenta.</p>
+    <h3 class="sub-title">Quién los ve</h3>
+    <p>Solo tu cuenta. Si te vinculas con un entrenador, él ve en solo lectura lo que aceptaste al vincularte; nunca tus alimentos propios ni tus recetas.</p>
+    <h3 class="sub-title">Tus derechos</h3>
+    <ul class="consent-list">
+      <li>Descargarlos: Ajustes › Tus datos.</li>
+      <li>Corregirlos: directamente en la app.</li>
+      <li>Borrarlos todos: Ajustes › Cuenta › «Borrar mi cuenta y mis datos». Así también retiras tu consentimiento.</li>
+      <li>Si crees que no se respetan, puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).</li>
+    </ul>`,
+};
+
 SHEETS['link-consent'] = {
   title: () => 'Vincular con tu entrenador',
   render: (s) => {
@@ -452,6 +514,20 @@ SHEETS['delete-account'] = {
 };
 
 /* ---------- acciones ---------- */
+
+FORMS['acct-consent'] = async (form) => {
+  if (!form.querySelector('#cs-health')?.checked) { toast('Marca la casilla para continuar.'); return; }
+  try {
+    for (const [kind, version] of Object.entries(CONSENTS)) await rpc('give_consent', { p_kind: kind, p_version: version });
+    const err = await refreshProfile();
+    if (err) { toast(errorText(err)); return; }
+    if (accessState() === 'consent') { toast('No se ha podido guardar. Prueba de nuevo.'); return; }
+    toast('Gracias. Ya puedes seguir.');
+    syncNow();
+  } catch (e) {
+    toast(errorText(e));
+  }
+};
 
 FORMS['acct-code'] = async (form) => {
   const code = form.querySelector('input').value.trim().toUpperCase().replace(/\s+/g, '');
@@ -518,6 +594,7 @@ FORMS['acct-delete'] = async (form, top) => {
 
 Object.assign(ACTIONS, {
   'acct-readonly': () => { readOnlyChosen = true; applyAccess(); render(); },
+  'acct-privacy': () => pushSheet({ type: 'privacy-info' }),
   'acct-gate': () => { readOnlyChosen = false; applyAccess(); },
   'acct-refresh': async () => {
     const err = await refreshProfile();

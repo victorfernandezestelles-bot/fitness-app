@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.24.0';
+export const APP_VERSION = '0.25.0';
 
 /* ---------- utilidades ---------- */
 
@@ -20,6 +20,16 @@ export function cleanData(v, key = '', free = false) {
   }
   return v;
 }
+// Consentimientos que pide la app y versión vigente de cada texto. Subir la versión vuelve a pedirlo a todos.
+// health: datos de salud (art. 9.2.a RGPD). Las condiciones de uso («terms») se añadirán cuando estén revisadas.
+export const CONSENTS = { health: 1 };
+export const HEALTH_CONSENT_TEXT = 'Consiento expresamente que Fitness trate mis datos de salud (peso, medidas, comidas, sueño, entrenos y fotos de progreso) para guardarlos en mi cuenta, sincronizarlos entre mis dispositivos y mostrarme mi progreso.';
+// Los que faltan, a partir de lo que devuelve el servidor (my_consents)
+export function missingConsents(rows, need = CONSENTS) {
+  const list = Array.isArray(rows) ? rows : [];
+  return Object.keys(need).filter((k) => !list.some((r) => r && r.kind === k && Number(r.version) >= need[k]));
+}
+
 // Lo que trae tras «#» un enlace de los correos de Supabase. Devuelve null si no es un enlace de cuenta.
 // strip: hay que quitarlo de la dirección (lleva códigos o sesiones). rec: qué hoja abrir (solo «recuperar contraseña»).
 export function parseAuthLink(hash) {
