@@ -285,7 +285,7 @@ function linkRequestLine(cls) {
 export function linkNotice() {
   const l = profile?.link;
   if (!l?.unlink_at || accessState() !== 'active' || Date.parse(l.unlink_at) <= Date.now()) return '';
-  return `<div class="notice small link-notice"><p>Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>.${profile.role === 'client' ? ' Después necesitarás el código de otro entrenador o un código de activación.' : ''}</p></div>`;
+  return `<div class="notice small link-notice"><p>Tu cuenta quedará desvinculada de tu entrenador el día <b>${dateNum(l.unlink_at)}</b>. Ese día se borrarán del servidor las notas, propuestas y fotos compartidas de este vínculo.${profile.role === 'client' ? ' Después necesitarás el código de otro entrenador o un código de activación.' : ''}</p></div>`;
 }
 
 function gateHTML(st) {
@@ -495,7 +495,7 @@ SHEETS['link-consent'] = {
       <li>Podrá pausar tu acceso a la app o desvincularte. Tú puedes desvincularte cuando quieras.</li>
     </ul>
     ${p.role === 'free' ? '<p class="hint">Tu cuenta dejará de ser de usuario libre y pasará a depender de tu entrenador. Si más adelante os desvinculáis, necesitarás otro entrenador o un código de activación nuevo.</p>' : ''}
-    ${p.link ? `<p class="hint">Cuando la acepte, dejarás de estar vinculado a ${esc(p.link.trainer_name || 'tu entrenador actual')}.</p>` : ''}
+    ${p.link ? `<p class="hint">Cuando la acepte, dejarás de estar vinculado a ${esc(p.link.trainer_name || 'tu entrenador actual')} y se borrarán del servidor las notas, propuestas y fotos compartidas de ese vínculo.</p>` : ''}
     ${p.link_request ? `<p class="hint">Se anulará tu solicitud a ${esc(p.link_request.trainer_name || 'otro entrenador')}.</p>` : ''}
     <label class="check top-gap"><input type="checkbox" id="lc-ok"> Entiendo y acepto compartir estos datos con ${esc(s.name)}</label>
     ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
