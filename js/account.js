@@ -697,7 +697,7 @@ Object.assign(ACTIONS, {
   },
   'acct-unlink': () => pushSheet({
     type: 'confirm', title: 'Desvincularme', ok: 'Desvincularme', danger: true,
-    text: `Dejarás de estar vinculado a ${profile?.link?.trainer_name || 'tu entrenador'} y ya no podrá ver tus datos.${profile?.role === 'client' ? ' Para seguir usando la app necesitarás el código de otro entrenador o un código de activación.' : ''}`,
+    text: `Dejarás de estar vinculado a ${profile?.link?.trainer_name || 'tu entrenador'} y ya no podrá ver tus datos. Las notas, propuestas y fotos compartidas de este vínculo se borrarán del servidor.${profile?.role === 'client' ? ' Para seguir usando la app necesitarás el código de otro entrenador o un código de activación.' : ''}`,
     onOk: async () => {
       try { await setProfile(await rpc('client_unlink')); render(); toast('Te has desvinculado'); } catch (e) { toast(errorText(e)); }
     },

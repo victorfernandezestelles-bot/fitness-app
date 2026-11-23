@@ -248,7 +248,7 @@ Object.assign(ACTIONS, {
     const c = top.c;
     pushSheet({
       type: 'confirm', title: 'Desvincular cliente', ok: 'Desvincular', danger: true,
-      text: `${c.name || c.email} dejará de ser tu cliente y ya no verás sus datos. Si su cuenta depende de ti, necesitará otro entrenador o un código de activación para seguir usando la app.`,
+      text: `${c.name || c.email} dejará de ser tu cliente y ya no verás sus datos. Tus notas y propuestas para este cliente se borrarán del servidor (tus plantillas siguen siendo tuyas). Si su cuenta depende de ti, necesitará otro entrenador o un código de activación para seguir usando la app.`,
       onOk: async () => {
         if (await act(() => rpc('trainer_unlink', { p_link: c.link_id }), 'Cliente desvinculado')) { closeSheets(); S.ui.client = null; render(); }
       },
