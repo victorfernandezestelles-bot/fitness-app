@@ -4,7 +4,7 @@
 import { e1rm } from './exercises.js';
 import { $, addDays, dateShort, esc, fmt, niceStep, parseISO, today } from './util.js';
 import { S } from './state.js';
-import { exName, exerciseHistory, isEffective } from './derived.js';
+import { exName, exerciseHistory, gymsUsed, isEffective } from './derived.js';
 import { ACTIONS, chartTooltip, render, toast } from './ui.js';
 
 export const METRICS = {
@@ -17,8 +17,8 @@ const RANGES = [['3m', '3 meses', 91], ['6m', '6 meses', 182], ['1a', '1 año', 
 const MAX = 4;
 
 // Valor de cada sesión según la medida (de la más antigua a la más reciente)
-function sessions(exId) {
-  return exerciseHistory(exId).slice().reverse().map((h) => {
+function sessions(exId, gym) {
+  return exerciseHistory(exId, gym).slice().reverse().map((h) => {
     const sets = h.sets.filter(isEffective);
     const kgs = sets.map((s) => s.kg || 0);
     const bestSet = sets.reduce((b, s) => {
@@ -60,7 +60,10 @@ function readSel(ctx, done) {
   const valid = new Set(done.map((d) => d.id));
   let ids = Array.isArray(st.ids) ? st.ids.filter((id) => valid.has(id)) : [];
   if (!ids.length && !st.touched) ids = done.slice(0, 3).map((d) => d.id);
-  return { ids, metric: METRICS[st.metric] ? st.metric : 'e1rm', range: RANGES.some(([k]) => k === st.range) ? st.range : '6m', pct: !!st.pct, touched: !!st.touched };
+  // Con más de un gimnasio, uno cada vez (por defecto, el del último entreno)
+  const gyms = gymsUsed();
+  const gym = gyms.length > 1 ? (gyms.some((g) => g.id === st.gym) ? st.gym : gyms[0].id) : undefined;
+  return { ids, metric: METRICS[st.metric] ? st.metric : 'e1rm', range: RANGES.some(([k]) => k === st.range) ? st.range : '6m', pct: !!st.pct, touched: !!st.touched, gym, gyms };
 }
 function writeSel(ctx, st) {
   try { localStorage.setItem(KEY(ctx), JSON.stringify(st)); } catch (e) { /* sin almacenamiento */ }
@@ -75,7 +78,7 @@ export function exProgressCard(ctx) {
   const days = RANGES.find(([k]) => k === st.range)[2];
   const from = days ? addDays(today(), -days + 1) : '0000-00-00';
   const series = st.ids.map((id, i) => {
-    const pts = sessions(id).filter((p) => p.date >= from && p[st.metric] != null).map((p) => ({ d: p.date, v: p[st.metric], top: p.top }));
+    const pts = sessions(id, st.gym).filter((p) => p.date >= from && p[st.metric] != null).map((p) => ({ d: p.date, v: p[st.metric], top: p.top }));
     return { id, i, name: done.find((d) => d.id === id)?.name || 'Ejercicio', pts };
   });
   const pct = st.pct && series.length > 1;
@@ -111,6 +114,7 @@ export function exProgressCard(ctx) {
       <div class="segmented small" role="tablist" aria-label="Qué medir">
         ${Object.entries(METRICS).map(([k, v]) => `<button type="button" role="tab" aria-selected="${st.metric === k}" data-act="exp-metric" data-ctx="${esc(ctx)}" data-v="${k}" aria-label="${v.l}">${v.s}</button>`).join('')}
       </div>
+      ${st.gyms.length > 1 ? `<div class="chips" role="group" aria-label="Gimnasio">${st.gyms.map((g) => `<button type="button" class="chip${g.id === st.gym ? ' on' : ''}" data-act="exp-gym" data-ctx="${esc(ctx)}" data-v="${esc(g.id)}" aria-pressed="${g.id === st.gym}">${esc(g.name)}</button>`).join('')}</div>` : ''}
       <div class="segmented small" role="tablist" aria-label="Periodo">
         ${RANGES.map(([k, l]) => `<button type="button" role="tab" aria-selected="${st.range === k}" data-act="exp-range" data-ctx="${esc(ctx)}" data-v="${k}">${l}</button>`).join('')}
       </div>
@@ -118,7 +122,7 @@ export function exProgressCard(ctx) {
     </div>
     ${series.length ? `<div class="chart exp-chart" id="exp-chart-${esc(ctx)}"></div>
       <ul class="list tight">${summary}</ul>` : '<p class="muted top-gap">Toca un ejercicio para verlo en la gráfica.</p>'}
-    <p class="hint">${m.hint}</p>
+    <p class="hint">${m.hint}${st.gyms.length > 1 ? ' Cada gimnasio por separado: sus máquinas no pesan igual.' : ''}</p>
   </section>`;
 }
 
@@ -197,7 +201,8 @@ function change(el, fn) {
 function loadStateFromDom(el, st) {
   const card = el.closest('.card');
   const ids = [...card.querySelectorAll('.exp-ex .chip.on')].map((b) => b.dataset.id);
-  return { ids, metric: st.metric || 'e1rm', range: st.range || '6m', pct: !!st.pct };
+  const gymOn = card.querySelector('[data-act="exp-gym"].on');
+  return { ids, metric: st.metric || 'e1rm', range: st.range || '6m', pct: !!st.pct, gym: gymOn ? gymOn.dataset.v : st.gym };
 }
 
 Object.assign(ACTIONS, {
@@ -211,4 +216,5 @@ Object.assign(ACTIONS, {
   'exp-metric': (el) => change(el, (st) => { st.metric = el.dataset.v; }),
   'exp-range': (el) => change(el, (st) => { st.range = el.dataset.v; }),
   'exp-pct': (el) => change(el, (st) => { st.pct = !st.pct; }),
+  'exp-gym': (el) => change(el, (st) => { st.gym = el.dataset.v; }),
 });

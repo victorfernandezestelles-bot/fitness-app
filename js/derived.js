@@ -314,10 +314,43 @@ export function periodVolume(from, end) {
   return { vol, ton, tonInd, byMuscle, sessions, sets };
 }
 
-// Series de la sesión anterior en la que apareció el ejercicio
+/* ---------- gimnasios ----------
+   Cada entreno puede llevar el gimnasio donde se hizo (w.gym = id, w.gymName = su nombre en ese momento).
+   Las máquinas y poleas pesan distinto en cada gimnasio: «la última vez», la progresión, el historial y las
+   gráficas de cada ejercicio van por gimnasio. Las series por músculo, el tonelaje y los totales, no. */
+export const gymOf = (w) => (w && typeof w.gym === 'string' ? w.gym : '');
+export const gymList = () => (Array.isArray(S.settings.gyms) ? S.settings.gyms.filter((g) => g && g.id && g.name) : []);
+// Nombre de un gimnasio: el de la lista; si ya no está, el que guardó su último entreno
+export function gymName(id) {
+  if (!id) return 'Sin gimnasio';
+  const g = gymList().find((x) => x.id === id);
+  if (g) return g.name;
+  const w = workoutsSorted().find((x) => gymOf(x) === id && x.gymName);
+  return w ? w.gymName : 'Gimnasio';
+}
+// Gimnasios con entrenos (de un ejercicio, si se da), del usado más recientemente al más antiguo
+export function gymsUsed(exId) {
+  const seen = new Map();
+  for (const w of workoutsSorted()) {
+    if (exId && !w.exercises.some((we) => we.exId === exId && we.sets.some(isMainSet))) continue;
+    const id = gymOf(w);
+    if (!seen.has(id)) seen.set(id, { id, name: gymName(id) });
+  }
+  return [...seen.values()];
+}
+// Gimnasio para un entreno nuevo: el del último entreno, si sigue en la lista; si no, el primero de la lista
+export function currentGym() {
+  const list = gymList();
+  if (!list.length) return '';
+  const last = workoutsSorted().find((w) => list.some((g) => g.id === gymOf(w)));
+  return last ? gymOf(last) : list[0].id;
+}
+
+// Series de la sesión anterior en la que apareció el ejercicio (en el mismo gimnasio que el entreno actual)
 export function lastPerformance(exId, current) {
   for (const w of workoutsSorted()) {
     if (current && (w.id === current.id || w.date > current.date)) continue;
+    if (current && gymOf(w) !== gymOf(current)) continue;
     const we = w.exercises.find((x) => x.exId === exId);
     if (!we) continue;
     const sets = we.sets.filter(isMainSet);
@@ -326,9 +359,11 @@ export function lastPerformance(exId, current) {
   return null;
 }
 
-export function exerciseHistory(exId) {
+// Sesiones de un ejercicio, de la más reciente a la más antigua. Con gym, solo las de ese gimnasio.
+export function exerciseHistory(exId, gym) {
   const out = [];
   for (const w of workoutsSorted()) {
+    if (gym !== undefined && gymOf(w) !== gym) continue;
     for (const we of w.exercises) {
       if (we.exId !== exId) continue;
       const sets = we.sets.filter(isMainSet);
@@ -338,7 +373,7 @@ export function exerciseHistory(exId) {
         const v = e1rm(st.kg, st.reps);
         if (v != null && (best == null || v > best)) best = v;
       }
-      out.push({ date: w.date, wid: w.id, sets, all: we.sets.filter(isEffective), best });
+      out.push({ date: w.date, wid: w.id, gym: gymOf(w), sets, all: we.sets.filter(isEffective), best });
     }
   }
   return out;

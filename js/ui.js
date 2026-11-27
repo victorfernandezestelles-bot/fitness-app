@@ -19,7 +19,7 @@ export const ACCESS = {
     'day-prev', 'day-next', 'day-today', 'calendar', 'cal-month', 'cal-day', 'cal-today', 'edit-entry', 'lib',
     'open-workout', 'open-routines', 'open-library', 'routine-open', 'ex-history', 'ex-filter', 'vol-history', 'volh-m', 'volh-metric', 'ton-ind',
     'week-prev', 'week-next', 'wtab', 'wview', 'wk-ex-toggle', 'act-open', 'range', 'report-open', 'rep-preset', 'rep-range', 'rep-foods', 'rep-share', 'rep-print', 'rep-file',
-    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'open-recipe', 'open-food', 'measure-open', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct',
+    'ph-list', 'ph-open', 'ph-compare', 'ph-pose', 'ph-unshare', 'theme', 'text-size', 'aj-jump', 'open-recipe', 'open-food', 'measure-open', 'exp-ex', 'exp-metric', 'exp-range', 'exp-pct', 'exp-gym', 'exh-gym',
     'export-json', 'export-csv-diario', 'export-csv-resumen', 'export-csv-entrenos', 'export-csv-actividades', 'export-photos']),
   inputs: new Set(['libq', 'pickq', 'ex-q', 'admin-q']),
   // Cambios que solo eligen qué ver (no guardan nada)

@@ -147,7 +147,7 @@ function entrenos() {
     const dur = workoutDuration(w);
     return `<li><button type="button" class="row" data-act="fc-wk" data-id="${esc(w.id)}">
       <span class="row-main">${esc(w.name || 'Entreno')}</span>
-      <span class="row-sub">${dayLabel(w.date)} · ${plural(st.sets, 'serie', 'series')}${dur ? ` · ${durLabel(dur)}` : ''}${st.tonnage ? ` · ${fmt(st.tonnage)} kg` : ''}</span>
+      <span class="row-sub">${dayLabel(w.date)}${w.gymName ? ` · ${esc(w.gymName)}` : ''} · ${plural(st.sets, 'serie', 'series')}${dur ? ` · ${durLabel(dur)}` : ''}${st.tonnage ? ` · ${fmt(st.tonnage)} kg` : ''}</span>
     </button></li>`;
   });
   return `
@@ -359,7 +359,7 @@ SHEETS['fc-workout'] = {
       const st = workoutStats(w);
       const dur = workoutDuration(w);
       return `
-        <p class="sheet-sub">${dayLabel(w.date)}${dayLabel(w.date) !== dateLong(w.date) ? ` · ${dateLong(w.date)}` : ''}</p>
+        <p class="sheet-sub">${dayLabel(w.date)}${dayLabel(w.date) !== dateLong(w.date) ? ` · ${dateLong(w.date)}` : ''}${w.gymName ? ` · ${esc(w.gymName)}` : ''}</p>
         <div class="stats">
           <div><span class="stat-l">Duración</span><span class="stat-v">${dur != null ? durLabel(dur) : '–'}</span></div>
           <div><span class="stat-l">Series</span><span class="stat-v">${st.sets}</span></div>

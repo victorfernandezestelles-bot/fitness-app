@@ -71,7 +71,7 @@ function dayParts(x, withFoods) {
   out.body = [x.steps != null ? `${fmt(x.steps)} pasos` : '', x.weight != null ? `${fmt(x.weight, 1)} kg` : '', x.sleep != null ? `${fmt(x.sleep, 1)} h de sueño` : ''].filter(Boolean).join(' · ');
   out.workouts = x.workouts.map((w) => {
     const dur = workoutDuration(w);
-    return { title: `${w.name || 'Entreno'}${dur ? ` (${durLabel(dur)})` : ''}`, lines: w.exercises.map(exerciseLine).filter(Boolean) };
+    return { title: `${w.name || 'Entreno'}${w.gymName ? ` en ${w.gymName}` : ''}${dur ? ` (${durLabel(dur)})` : ''}`, lines: w.exercises.map(exerciseLine).filter(Boolean) };
   });
   out.activities = x.activities.map((a) => [actName(a), a.min ? `${fmt(a.min)} min` : '', a.km ? `${fmt(a.km, 1)} km` : '', a.kcal ? `${fmt(a.kcal)} kcal` : ''].filter(Boolean).join(' · '));
   if (x.measures) out.measures = MEASURES.filter((m) => x.measures[m.k] != null).map((m) => `${m.l.toLowerCase()} ${fmt(x.measures[m.k], 1)} ${m.u}`).join(', ');

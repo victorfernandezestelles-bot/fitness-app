@@ -1,7 +1,7 @@
 import { MACROS, MICROS, sumNut } from './nutrients.js';
-import { $, APP_VERSION, csvNum, csvText, dateLong, deliverCsv, deliverFile, fmt, inputVal, localDay, num, plural, restLabel, today } from './util.js';
+import { $, APP_VERSION, csvNum, csvText, dateLong, deliverCsv, deliverFile, esc, fmt, inputVal, localDay, num, plural, restLabel, today } from './util.js';
 import { MEAL_NAME, S, SCHEMA, flushAll, replaceAll, saveSettings, snapshot, wipeAll } from './state.js';
-import { ACTIVITY, dayOf, parseUnit, pluralEs } from './derived.js';
+import { ACTIVITY, dayOf, gymList, parseUnit, pluralEs } from './derived.js';
 import { ACTIONS, CHANGES, FORMS, VIEWS, applyTheme, closeSheets, pushSheet, render, selectChip, toast } from './ui.js';
 import { exportCsvEntrenos } from './training.js';
 import { exportCsvActividades } from './cardio.js';
@@ -87,6 +87,10 @@ export function viewAjustes() {
       <div class="chips">${[60, 90, 120, 150, 180, 240].map((v) => `<button type="button" class="chip${S.settings.rest === v ? ' on' : ''}" data-act="rest-default" data-s="${v}" aria-pressed="${S.settings.rest === v}">${restLabel(v)}</button>`).join('')}</div>
     </div>
     <label class="check"><input type="checkbox" id="rest-sound" data-change="rest-sound" ${S.settings.restSound ? 'checked' : ''}> Avisar con sonido al terminar</label>
+    <h3 class="sub-h top-gap">Gimnasios</h3>
+    <p class="muted">Si entrenas en más de un sitio, añádelos: al empezar eliges dónde estás y cada ejercicio guarda su progreso por gimnasio, porque las máquinas no pesan igual en todos.</p>
+    ${gymList().length ? `<ul class="list tight">${gymList().map((g) => `<li><button type="button" class="row" data-act="gym-open" data-id="${esc(g.id)}"><span class="row-main">${esc(g.name)}</span><span class="row-side">Cambiar</span></button></li>`).join('')}</ul>` : ''}
+    <button type="button" class="btn ghost small top-gap" data-act="gym-add">+ Añadir gimnasio</button>
   </section>
 
 

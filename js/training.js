@@ -3,8 +3,8 @@ import { TEMPLATES } from './templates.js';
 import { bodyPair, bodySVG, dominantView, musclesLabel } from './bodymap.js';
 import { $, addDays, clockLabel, csvNum, csvText, dateShort, dayLabel, deliverCsv, durLabel, esc, fmt, inputVal, norm, num, parseISO, plural, restLabel, today, uid } from './util.js';
 import { S, saveExercises, saveRoutines, saveSettings, saveWorkout } from './state.js';
-import { SEG_LABEL, allExercises, emptySet, exCfg, exName, exerciseHistory, getEx, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
-import { ACTIONS, CHANGES, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
+import { SEG_LABEL, allExercises, currentGym, emptySet, exCfg, exName, exerciseHistory, getEx, gymList, gymName, gymOf, gymsUsed, isEffective, isSeg, lastPerformance, mondayOf, musclesText, nextInRotation, setText, setsText, suggestion, weekLevels, weekVolume, workoutDuration, workoutLevels, workoutStats, workoutVolume, workoutsSorted } from './derived.js';
+import { ACTIONS, CHANGES, FORMS, HOOKS, INPUTS, SHEETS, VIEWS, closeSheets, pageList, popSheet, popTo, pushSheet, render, renderSheets, replaceTop, toast, undoable } from './ui.js';
 import { bar } from './food.js';
 import { drawSeries } from './progress.js';
 import { viewCardio } from './cardio.js';
@@ -23,6 +23,8 @@ export function newWorkout(fromRoutine) {
     end: null,
     exercises: [],
   };
+  const gym = currentGym();
+  if (gym) { w.gym = gym; w.gymName = gymName(gym); }
   if (fromRoutine) {
     for (const it of fromRoutine.items) {
       const n = Math.max(1, it.sets || 3);
@@ -107,11 +109,12 @@ export function viewEntreno() {
       </div>` : ''}
     </div>
     ${recent.length ? (S.ui.wview === 'list' ? (() => {
+      const multiGym = gymsUsed().length > 1;
       const pl = pageList('workouts', recent, 10, (w) => {
         const st = workoutStats(w);
         return `<li><button type="button" class="row" data-act="open-workout" data-id="${w.id}">
         <span class="row-main">${esc(w.name)}${w.end ? '' : ' <em class="tag">en curso</em>'}</span>
-        <span class="row-sub">${dayLabel(w.date)}${workoutDuration(w) != null ? ` · ${durLabel(workoutDuration(w))}` : ''} · ${w.exercises.length} ejercicios · ${fmt(st.tonnage)} kg movidos</span>
+        <span class="row-sub">${dayLabel(w.date)}${multiGym ? ` · ${esc(gymName(gymOf(w)))}` : ''}${workoutDuration(w) != null ? ` · ${durLabel(workoutDuration(w))}` : ''} · ${w.exercises.length} ejercicios · ${fmt(st.tonnage)} kg movidos</span>
         <span class="row-side">${st.sets} <small>series</small></span>
       </button></li>`;
       });
@@ -241,6 +244,7 @@ SHEETS.workout = {
         <span class="eyebrow">${w.end ? 'Duración' : 'Tiempo entrenando'}</span>
         <b ${w.end ? '' : `class="live-elapsed" data-start="${w.start}"`}>${w.end ? (dur == null ? '–' : durLabel(dur)) : clockLabel(Date.now() - Date.parse(w.start))}</b>
       </div>
+      ${gymPicker(w)}
       ${st.sets ? (w.end ? `<div class="wk-map">${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</div>` : `<details class="detail compact wk-map" ${s.mapOpen ? 'open' : ''} data-toggle="mapOpen"><summary>Músculos trabajados hasta ahora</summary>${bodyPair(workoutLevels(w), '', bodyModel())}${mapLegend('session')}</details>`) : ''}
       ${w.end ? workoutMuscles(w) : ''}
       <div class="form-grid">
@@ -249,6 +253,7 @@ SHEETS.workout = {
       </div>
       ${exs || '<p class="empty">Añade el primer ejercicio. Si lo has hecho antes, verás lo que levantaste la última vez.</p>'}
       <button type="button" class="btn wide" data-act="wk-ex-add">+ Añadir ejercicio</button>
+      ${gymList().length || gymOf(w) ? '' : `<p><button type="button" class="link tap-link" data-act="gym-add" data-wid="${esc(w.id)}">¿Entrenas en varios gimnasios? Añade dónde entrenas</button></p>`}
       <p class="hint">${st.sets} series efectivas · ${fmt(st.tonnage)} kg movidos. Toca el número de una serie para marcarla como calentamiento (C), que no cuenta para el volumen. «+ Dropset» y «+ Rest-pause» añaden una bajada o un bloque debajo de la última serie hecha: suman al volumen, pero no al 1RM ni a la progresión.${showRir ? ' RIR: repeticiones que te quedaban en reserva (0 = al fallo).' : ''}</p>
       <div class="sheet-actions">
         <button type="button" class="btn danger ghost" data-act="wk-del">Borrar</button>
@@ -520,7 +525,10 @@ SHEETS['ex-history'] = {
   title: (s) => getEx(s.id)?.name || 'Ejercicio',
   render: (s) => {
     const ex = getEx(s.id);
-    const hist = exerciseHistory(s.id);
+    // Con más de un gimnasio, un gimnasio cada vez (por defecto, el de la última sesión)
+    const gyms = gymsUsed(s.id);
+    s.gymShown = gyms.length > 1 ? (gyms.some((g) => g.id === s.gym) ? s.gym : gyms[0].id) : undefined;
+    const hist = exerciseHistory(s.id, s.gymShown);
     let bestSet = null;
     let best = null;
     for (const h of hist) {
@@ -535,6 +543,7 @@ SHEETS['ex-history'] = {
         <button type="button" class="btn ghost small" data-act="ex-edit" data-id="${esc(s.id)}">Editar músculos</button>
         <button type="button" class="btn ghost small" data-act="ex-cfg" data-id="${esc(s.id)}">Rango ${exCfg(s.id).min}–${exCfg(s.id).max} · +${fmt(exCfg(s.id).inc, 2)} kg</button>
       </div>
+      ${gyms.length > 1 ? `<div class="chips top-gap" role="group" aria-label="Gimnasio">${gyms.map((g) => `<button type="button" class="chip${g.id === s.gymShown ? ' on' : ''}" data-act="exh-gym" data-v="${esc(g.id)}" aria-pressed="${g.id === s.gymShown}">${esc(g.name)}</button>`).join('')}</div>` : ''}
       <div class="stats top-gap">
         <div><span class="stat-l">1RM estimado</span><span class="stat-v">${fmt(best, 1)}<small> kg</small></span></div>
         <div><span class="stat-l">Mejor serie</span><span class="stat-v">${bestSet ? setText(bestSet) : '–'}</span></div>
@@ -551,11 +560,11 @@ SHEETS['ex-history'] = {
       })() : '<p class="empty">Aún no has hecho este ejercicio.</p>'}
       <p class="hint">1RM estimado con la fórmula de Epley a partir de series de hasta 12 repeticiones.</p>`;
   },
-  mount: (s) => drawExChart(s.id),
+  mount: (s) => drawExChart(s.id, s.gymShown),
 };
 
-export function drawExChart(exId) {
-  const pts = exerciseHistory(exId).filter((h) => h.best != null).reverse().map((h) => ({ d: h.date, v: h.best }));
+export function drawExChart(exId, gym) {
+  const pts = exerciseHistory(exId, gym).filter((h) => h.best != null).reverse().map((h) => ({ d: h.date, v: h.best }));
   drawSeries($('#ex-chart'), pts, 'kg', 0, { H: 170, spread: 5, label: 'Evolución del 1RM estimado' });
 }
 
@@ -617,12 +626,103 @@ export function saveRoutineDraft(s) {
   return true;
 }
 
+/* ---------- gimnasios ---------- */
+
+// Botones para elegir el gimnasio del entreno (solo si hay alguno)
+function gymPicker(w) {
+  const list = gymList();
+  const cur = gymOf(w);
+  if (!list.length && !cur) return '';
+  const opts = list.slice();
+  if (cur && !opts.some((g) => g.id === cur)) opts.push({ id: cur, name: gymName(cur) });
+  return `<div class="wk-gym">
+    <span class="eyebrow">Gimnasio</span>
+    <div class="chips" role="group" aria-label="Gimnasio">
+      ${opts.map((g) => `<button type="button" class="chip${g.id === cur ? ' on' : ''}" data-act="wk-gym" data-v="${esc(g.id)}" aria-pressed="${g.id === cur}">${esc(g.name)}</button>`).join('')}
+      <button type="button" class="chip" data-act="gym-add" data-wid="${esc(w.id)}" aria-label="Añadir gimnasio">+</button>
+    </div>
+  </div>`;
+}
+
+function setGym(w, id) {
+  if (!w) return;
+  if (id) { w.gym = id; w.gymName = gymName(id); } else { delete w.gym; delete w.gymName; }
+  saveWorkout(w.id);
+}
+
+SHEETS['gym-edit'] = {
+  title: (s) => (s.id ? 'Cambiar gimnasio' : 'Nuevo gimnasio'),
+  render: (s) => `
+    <p class="muted">Ponle el nombre que quieras. Las series de cada ejercicio se guardan por gimnasio: «la última vez», la progresión y las gráficas no mezclan uno con otro.</p>
+    <form data-form="gym-save" class="top-gap" novalidate>
+      <label class="field"><span>Nombre</span><input id="gym-name" type="text" maxlength="30" autocomplete="off" value="${esc(s.name ?? (s.id ? gymName(s.id) : ''))}" required></label>
+      ${s.error ? `<p class="sync-err" role="alert">${esc(s.error)}</p>` : ''}
+      <div class="sheet-actions">
+        ${s.id ? '<button type="button" class="btn danger ghost" data-act="gym-del">Quitar</button>' : ''}
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>`,
+};
+
+FORMS['gym-save'] = (form, top) => {
+  const name = ($('#gym-name')?.value || '').replace(/[<>"]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  top.name = name;
+  const list = gymList();
+  if (!name) { top.error = 'Escribe un nombre.'; renderSheets(); return; }
+  if (list.some((g) => g.id !== top.id && norm(g.name) === norm(name))) { top.error = 'Ya tienes un gimnasio con ese nombre.'; renderSheets(); return; }
+  if (!top.id && list.length >= 10) { top.error = 'Como mucho 10 gimnasios.'; renderSheets(); return; }
+  if (top.id) {
+    S.settings.gyms = list.map((g) => (g.id === top.id ? { ...g, name } : g));
+    saveSettings();
+    for (const w of Object.values(S.workouts)) if (gymOf(w) === top.id && w.gymName !== name) { w.gymName = name; saveWorkout(w.id); }
+    popSheet();
+    render();
+    toast('Gimnasio cambiado');
+    return;
+  }
+  // Si algún entreno ya tenía un gimnasio con ese nombre (uno quitado antes), se recupera el mismo
+  const old = Object.values(S.workouts).find((w) => gymOf(w) && !list.some((g) => g.id === gymOf(w)) && norm(w.gymName || '') === norm(name));
+  const id = old ? gymOf(old) : 'g-' + uid();
+  S.settings.gyms = [...list, { id, name }];
+  saveSettings();
+  const w = top.wid && S.workouts[top.wid];
+  if (w) setGym(w, id);
+  const loose = Object.values(S.workouts).filter((x) => !gymOf(x));
+  popSheet();
+  render();
+  if (!list.length && loose.length) {
+    // Primer gimnasio: los entrenos anteriores pueden pasar a él
+    pushSheet({
+      type: 'confirm', title: 'Tus entrenos anteriores', ok: `Sí, a ${name}`,
+      text: `Tienes ${plural(loose.length, 'entreno', 'entrenos')} sin gimnasio. ¿Los pongo en «${name}»? Si los hiciste en otro sitio, di que no: se quedarán como «Sin gimnasio».`,
+      onOk: () => { for (const x of loose) setGym(x, id); closeSheets(); render(); toast(`${plural(loose.length, 'entreno', 'entrenos')} en ${name}`); },
+    });
+  } else toast(`Gimnasio «${name}» añadido`);
+};
+
+Object.assign(ACTIONS, {
+  'wk-gym': (el, top) => { const w = S.workouts[top?.id]; if (!w) return; setGym(w, el.dataset.v); renderSheets(); },
+  'gym-add': (el) => pushSheet({ type: 'gym-edit', wid: el.dataset.wid || null }),
+  'gym-open': (el) => pushSheet({ type: 'gym-edit', id: el.dataset.id }),
+  'gym-del': (el, top) => {
+    const g = gymList().find((x) => x.id === top.id);
+    if (!g) return;
+    const n = Object.values(S.workouts).filter((w) => gymOf(w) === g.id).length;
+    replaceTop({
+      type: 'confirm', title: 'Quitar gimnasio', ok: 'Quitar', danger: true,
+      text: `«${g.name}» dejará de salir al empezar un entreno.${n ? ` Tus ${plural(n, 'entreno', 'entrenos')} de allí no se borran y siguen con su historial.` : ''}`,
+      onOk: () => { S.settings.gyms = gymList().filter((x) => x.id !== g.id); saveSettings(); closeSheets(); render(); toast('Gimnasio quitado'); },
+    });
+  },
+  'exh-gym': (el, top) => { top.gym = el.dataset.v; renderSheets(); },
+});
+
 export function openWorkout(id) {
   pushSheet({ type: 'workout', id });
 }
 
 export async function exportCsvEntrenos() {
-  const rows = [['fecha', 'entrenamiento', 'ejercicio', 'serie', 'tipo', 'kg', 'repeticiones', 'RIR', '1RM estimado (kg)', 'músculos principales', 'superserie', 'nota de la sesión'].join(';')];
+  const rows = [['fecha', 'entrenamiento', 'gimnasio', 'ejercicio', 'serie', 'tipo', 'kg', 'repeticiones', 'RIR', '1RM estimado (kg)', 'músculos principales', 'superserie', 'nota de la sesión'].join(';')];
   for (const w of [...workoutsSorted()].reverse()) {
     for (const we of w.exercises) {
       const ex = getEx(we.exId);
@@ -633,7 +733,7 @@ export async function exportCsvEntrenos() {
         const seg = isSeg(st);
         if (!warm && !seg) n++;
         const tipo = warm ? 'calentamiento' : st.t === 'd' ? 'dropset' : st.t === 'rp' ? 'rest-pause' : 'efectiva';
-        rows.push([w.date, w.name, exName(we), warm ? '' : n, tipo, csvNum(st.kg, 2), st.reps ?? '', st.rir ?? '',
+        rows.push([w.date, w.name, gymOf(w) ? gymName(gymOf(w)) : '', exName(we), warm ? '' : n, tipo, csvNum(st.kg, 2), st.reps ?? '', st.rir ?? '',
           csvNum(warm || seg ? null : e1rm(st.kg, st.reps), 1), (ex?.primary || []).map((m) => MUSCLE_NAME[m]).join(', '), we.ss ? 'sí' : '', we.note || ''].map(csvText).join(';'));
       }
     }
